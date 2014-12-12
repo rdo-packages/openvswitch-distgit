@@ -12,16 +12,16 @@
 # 3. Run: ./boot.sh
 # 4. Run: ./configure.sh
 # 5. Run: make dist
-%define snapshot .git20141107
-%define snap_gitsha -git39ebb203
+#% define snapshot .git20141107
+#% define snap_gitsha -git39ebb203
 
 # If wants to run tests while building, specify the '--with check'
 # option. For example:
 # rpmbuild -bb --with check openvswitch.spec
 
 Name: openvswitch
-Version: 2.3.0
-Release: 3%{?snapshot}%{?dist}
+Version: 2.3.1
+Release: 1%{?snapshot}%{?dist}
 Summary: Open vSwitch daemon/database/utilities
 
 # Nearly all of openvswitch is ASL 2.0.  The bugtool is LGPLv2+, and the
@@ -295,6 +295,9 @@ rm -rf $RPM_BUILD_ROOT
 %exclude %{_datadir}/openvswitch/scripts/ovs-save
 
 %changelog
+* Fri Dec 05 2014 Flavio Leitner - 2.3.1-1
+- updated to 2.3.1
+
 * Fri Nov 07 2014 Flavio Leitner - 2.3.0-3.git20141107
 - updated to 2.3.0-git39ebb203
 
