@@ -12,8 +12,8 @@
 # 3. Run: ./boot.sh
 # 4. Run: ./configure.sh
 # 5. Run: make dist
-%define snapshot .git20150113
-%define snap_gitsha -git3282e51
+%define snapshot .git20150327
+%define snap_gitsha -git4750c96
 
 # If wants to run tests while building, specify the '--with check'
 # option. For example:
@@ -21,7 +21,7 @@
 
 Name: openvswitch
 Version: 2.3.1
-Release: 2%{?snapshot}%{?dist}
+Release: 3%{?snapshot}%{?dist}
 Summary: Open vSwitch daemon/database/utilities
 
 # Nearly all of openvswitch is ASL 2.0.  The bugtool is LGPLv2+, and the
@@ -39,17 +39,19 @@ BuildRequires: systemd-units openssl openssl-devel
 BuildRequires: python python-twisted-core python-zope-interface PyQt4
 BuildRequires: desktop-file-utils
 BuildRequires: groff graphviz
+# make check dependencies
+BuildRequires: procps-ng
 
 Requires: openssl iproute module-init-tools
 #Upstream kernel commit 4f647e0a3c37b8d5086214128614a136064110c3
-Requires: kernel >= 3.15.0-0
+#Requires: kernel >= 3.15.0-0
 
 Requires(post): systemd-units
 Requires(preun): systemd-units
 Requires(postun): systemd-units
 Obsoletes: openvswitch-controller <= 0:2.1.0-1
 
-%bcond_with check
+%bcond_without check
 
 %description
 Open vSwitch provides standard network bridging functions and
@@ -295,6 +297,11 @@ rm -rf $RPM_BUILD_ROOT
 %exclude %{_datadir}/openvswitch/scripts/ovs-save
 
 %changelog
+* Fri Mar 27 2015 Flavio Leitner - 2.3.1-3.git20150327
+- updated to 2.3.1-git4750c96
+- commented out kernel requires
+- added requires to procps-ng (testsuite #84)
+
 * Wed Jan 14 2015 Flavio Leitner - 2.3.1-2.git20150113
 - updated to 2.3.1-git3282e51
 
