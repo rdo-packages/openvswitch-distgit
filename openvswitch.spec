@@ -21,7 +21,7 @@
 
 Name: openvswitch
 Version: 2.3.1
-Release: 3%{?snapshot}%{?dist}
+Release: 4%{?snapshot}%{?dist}
 Summary: Open vSwitch daemon/database/utilities
 
 # Nearly all of openvswitch is ASL 2.0.  The bugtool is LGPLv2+, and the
@@ -297,6 +297,9 @@ rm -rf $RPM_BUILD_ROOT
 %exclude %{_datadir}/openvswitch/scripts/ovs-save
 
 %changelog
+* Thu Jun 18 2015 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 2.3.1-4.git20150327
+- Rebuilt for https://fedoraproject.org/wiki/Fedora_23_Mass_Rebuild
+
 * Fri Mar 27 2015 Flavio Leitner - 2.3.1-3.git20150327
 - updated to 2.3.1-git4750c96
 - commented out kernel requires
