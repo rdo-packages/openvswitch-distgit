@@ -1,5 +1,3 @@
-%global _hardened_build 1
-
 # Uncomment these for snapshot releases:
 # snapshot is the date YYYYMMDD of the snapshot
 # snap_git is the 8 git sha digits of the last commit
@@ -12,16 +10,19 @@
 # 3. Run: ./boot.sh
 # 4. Run: ./configure.sh
 # 5. Run: make dist
-%define snapshot .git20150327
-%define snap_gitsha -git4750c96
+#% define snapshot .git20150327
+#% define snap_gitsha -git4750c96
 
 # If wants to run tests while building, specify the '--with check'
 # option. For example:
 # rpmbuild -bb --with check openvswitch.spec
 
+# Enable PIE, bz#955181
+%global _hardened_build 1
+
 Name: openvswitch
-Version: 2.3.1
-Release: 4%{?snapshot}%{?dist}
+Version: 2.3.2
+Release: 1%{?snapshot}%{?dist}
 Summary: Open vSwitch daemon/database/utilities
 
 # Nearly all of openvswitch is ASL 2.0.  The bugtool is LGPLv2+, and the
@@ -31,6 +32,8 @@ Summary: Open vSwitch daemon/database/utilities
 License: ASL 2.0 and LGPLv2+ and SISSL
 URL: http://openvswitch.org
 Source0: http://openvswitch.org/releases/%{name}-%{version}%{?snap_gitsha}.tar.gz
+
+Patch1: openvswitch-runtimedir.patch
 
 ExcludeArch: ppc
 
@@ -90,6 +93,7 @@ files needed to build an external application.
 
 %prep
 %setup -q -n %{name}-%{version}%{?snap_gitsha}
+%patch1 -p1
 
 %build
 %configure --enable-ssl --with-pkidir=%{_sharedstatedir}/openvswitch/pki
@@ -285,6 +289,7 @@ rm -rf $RPM_BUILD_ROOT
 %doc FAQ NEWS INSTALL.DPDK rhel/README.RHEL
 /var/lib/openvswitch
 /var/log/openvswitch
+%ghost %attr(755,root,root) %{_rundir}/openvswitch
 %exclude %{_bindir}/ovs-benchmark
 %exclude %{_bindir}/ovs-parse-backtrace
 %exclude %{_bindir}/ovs-pcap
@@ -297,6 +302,10 @@ rm -rf $RPM_BUILD_ROOT
 %exclude %{_datadir}/openvswitch/scripts/ovs-save
 
 %changelog
+* Thu Jun 18 2015 Flavio Leitner - 2.3.2-1
+- updated to 2.3.2 (#1233442)
+- fixed to own /var/run/openvswitch directory (#1200887)
+
 * Thu Jun 18 2015 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 2.3.1-4.git20150327
 - Rebuilt for https://fedoraproject.org/wiki/Fedora_23_Mass_Rebuild
 
