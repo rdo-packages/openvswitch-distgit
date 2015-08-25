@@ -1,9 +1,0 @@
-diff -pur openvswitch-2.3.1-git4750c96/rhel/usr_lib_systemd_system_openvswitch-nonetwork.service openvswitch-2.3.1-git4750c96.runtime/rhel/usr_lib_systemd_system_openvswitch-nonetwork.service
---- openvswitch-2.3.1-git4750c96/rhel/usr_lib_systemd_system_openvswitch-nonetwork.service	2015-03-27 07:11:14.000000000 -0300
-+++ openvswitch-2.3.1-git4750c96.runtime/rhel/usr_lib_systemd_system_openvswitch-nonetwork.service	2015-04-27 14:28:24.200553595 -0300
-@@ -11,3 +11,5 @@ EnvironmentFile=-/etc/sysconfig/openvswi
- ExecStart=/usr/share/openvswitch/scripts/ovs-ctl start \
-           --system-id=random $OPTIONS
- ExecStop=/usr/share/openvswitch/scripts/ovs-ctl stop
-+RuntimeDirectory=openvswitch
-+RuntimeDirectoryMode=0755

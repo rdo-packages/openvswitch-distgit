@@ -1,17 +1,9 @@
 # Uncomment these for snapshot releases:
 # snapshot is the date YYYYMMDD of the snapshot
 # snap_git is the 8 git sha digits of the last commit
-# You must edit configure.ac and downgrade the version from
-# the development one to the stable one to not confuse RPM
-# during future upgrades.
-# Steps:
-# 1. Checkout the git branch
-# 2. Change version in configure.ac to be <stable version>-git<8sha>
-# 3. Run: ./boot.sh
-# 4. Run: ./configure.sh
-# 5. Run: make dist
-#% define snapshot .git20150327
-#% define snap_gitsha -git4750c96
+# Use ovs-snapshot.sh to create the tarball.
+#% define snapshot .git20150730
+#% define snap_gitsha -git72bfa562
 
 # If wants to run tests while building, specify the '--with check'
 # option. For example:
@@ -21,7 +13,7 @@
 %global _hardened_build 1
 
 Name: openvswitch
-Version: 2.3.2
+Version: 2.4.0
 Release: 1%{?snapshot}%{?dist}
 Summary: Open vSwitch daemon/database/utilities
 
@@ -32,12 +24,11 @@ Summary: Open vSwitch daemon/database/utilities
 License: ASL 2.0 and LGPLv2+ and SISSL
 URL: http://openvswitch.org
 Source0: http://openvswitch.org/releases/%{name}-%{version}%{?snap_gitsha}.tar.gz
-
-Patch1: openvswitch-runtimedir.patch
+Source1: ovs-snapshot.sh
 
 ExcludeArch: ppc
 
-BuildRequires: autoconf
+BuildRequires: autoconf automake libtool
 BuildRequires: systemd-units openssl openssl-devel
 BuildRequires: python python-twisted-core python-zope-interface PyQt4
 BuildRequires: desktop-file-utils
@@ -93,9 +84,14 @@ files needed to build an external application.
 
 %prep
 %setup -q -n %{name}-%{version}%{?snap_gitsha}
-%patch1 -p1
 
 %build
+%if 0%{?snap_gitsha:1}
+# fix the snapshot unreleased version to be the released one.
+sed -i.old -e "s/^AC_INIT(openvswitch,.*,/AC_INIT(openvswitch, %{version},/" configure.ac
+./boot.sh
+%endif
+
 %configure --enable-ssl --with-pkidir=%{_sharedstatedir}/openvswitch/pki
 make %{?_smp_mflags}
 
@@ -137,20 +133,6 @@ rmdir $RPM_BUILD_ROOT/%{_datadir}/openvswitch/python/
 
 install -d -m 0755 $RPM_BUILD_ROOT/%{_sharedstatedir}/openvswitch
 
-install -d -m 0755 $RPM_BUILD_ROOT%{_includedir}/openvswitch
-install -p -D -m 0644 include/openvswitch/*.h \
-        -t $RPM_BUILD_ROOT%{_includedir}/openvswitch
-install -p -D -m 0644 config.h \
-        -t $RPM_BUILD_ROOT%{_includedir}/openvswitch
-
-install -d -m 0755 $RPM_BUILD_ROOT%{_includedir}/openvswitch/lib
-install -p -D -m 0644 lib/*.h \
-        -t $RPM_BUILD_ROOT%{_includedir}/openvswitch/lib
-
-install -d -m 0755 $RPM_BUILD_ROOT%{_includedir}/openflow
-install -p -D -m 0644 include/openflow/*.h \
-        -t $RPM_BUILD_ROOT%{_includedir}/openflow
-
 touch $RPM_BUILD_ROOT%{_sysconfdir}/openvswitch/conf.db
 touch $RPM_BUILD_ROOT%{_sysconfdir}/openvswitch/system-id.conf
 
@@ -189,16 +171,6 @@ rm -rf $RPM_BUILD_ROOT
     fi
 %endif
 
-# Package with native systemd unit file is installed for the first time
-%triggerun -- %{name} < 1.9.0-1
-# Save the current service runlevel info
-# User must manually run systemd-sysv-convert --apply openvswitch
-# to migrate them to systemd targets
-/usr/bin/systemd-sysv-convert --save %{name} >/dev/null 2>&1 ||:
-
-# Run these because the SysV package being removed won't do them
-/sbin/chkconfig --del %{name} >/dev/null 2>&1 || :
-/bin/systemctl try-restart %{name}.service >/dev/null 2>&1 || :
 
 %postun
 %if 0%{?systemd_postun_with_restart:1}
@@ -228,11 +200,14 @@ rm -rf $RPM_BUILD_ROOT
 %files devel
 %{_libdir}/*.a
 %{_libdir}/*.la
+%{_libdir}/pkgconfig/*.pc
 %{_includedir}/openvswitch/*
 %{_includedir}/openflow/*
 
 %files
 %defattr(-,root,root)
+%{_sysconfdir}/bash_completion.d/ovs-appctl-bashcomp.bash
+%{_sysconfdir}/bash_completion.d/ovs-vsctl-bashcomp.bash
 %dir %{_sysconfdir}/openvswitch
 %config %ghost %{_sysconfdir}/openvswitch/conf.db
 %config %ghost %{_sysconfdir}/openvswitch/system-id.conf
@@ -252,14 +227,14 @@ rm -rf $RPM_BUILD_ROOT
 %config %{_datadir}/openvswitch/vswitch.ovsschema
 %config %{_datadir}/openvswitch/vtep.ovsschema
 %{_bindir}/ovs-appctl
-#%{_bindir}/ovs-docker
+%{_bindir}/ovs-docker
 %{_bindir}/ovs-dpctl
 %{_bindir}/ovs-dpctl-top
 %{_bindir}/ovs-ofctl
 %{_bindir}/ovs-vsctl
 %{_bindir}/ovsdb-client
 %{_bindir}/ovsdb-tool
-#%{_bindir}/ovs-testcontroller
+%{_bindir}/ovs-testcontroller
 %{_bindir}/ovs-pki
 %{_bindir}/vtep-ctl
 %{_sbindir}/ovs-bugtool
@@ -284,9 +259,9 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/man8/ovs-vsctl.8*
 %{_mandir}/man8/ovs-vswitchd.8*
 %{_mandir}/man8/ovs-parse-backtrace.8*
-#%{_mandir}/man8/ovs-testcontroller.8*
-%doc COPYING DESIGN INSTALL.SSL NOTICE README WHY-OVS
-%doc FAQ NEWS INSTALL.DPDK rhel/README.RHEL
+%{_mandir}/man8/ovs-testcontroller.8*
+%doc COPYING DESIGN.md INSTALL.SSL.md NOTICE README.md WHY-OVS.md
+%doc FAQ.md NEWS INSTALL.DPDK.md rhel/README.RHEL
 /var/lib/openvswitch
 /var/log/openvswitch
 %ghost %attr(755,root,root) %{_rundir}/openvswitch
@@ -302,6 +277,9 @@ rm -rf $RPM_BUILD_ROOT
 %exclude %{_datadir}/openvswitch/scripts/ovs-save
 
 %changelog
+* Mon Aug 24 2015 Flavio Leitner - 2.4.0-1
+- updated to 2.4.0 (#1256171)
+
 * Thu Jun 18 2015 Flavio Leitner - 2.3.2-1
 - updated to 2.3.2 (#1233442)
 - fixed to own /var/run/openvswitch directory (#1200887)
