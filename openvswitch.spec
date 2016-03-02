@@ -13,8 +13,8 @@
 %global _hardened_build 1
 
 Name: openvswitch
-Version: 2.4.0
-Release: 2%{?snapshot}%{?dist}
+Version: 2.5.0
+Release: 1%{?snapshot}%{?dist}
 Summary: Open vSwitch daemon/database/utilities
 
 # Nearly all of openvswitch is ASL 2.0.  The bugtool is LGPLv2+, and the
@@ -30,7 +30,7 @@ ExcludeArch: ppc
 
 BuildRequires: autoconf automake libtool
 BuildRequires: systemd-units openssl openssl-devel
-BuildRequires: python python-twisted-core python-zope-interface PyQt4
+BuildRequires: python python-twisted-core python-zope-interface PyQt4 python-six
 BuildRequires: desktop-file-utils
 BuildRequires: groff graphviz
 # make check dependencies
@@ -56,7 +56,7 @@ traffic.
 Summary: Open vSwitch python bindings
 License: ASL 2.0
 BuildArch: noarch
-Requires: python
+Requires: python python-six
 
 %description -n python-openvswitch
 Python bindings for the Open vSwitch database
@@ -135,6 +135,9 @@ install -d -m 0755 $RPM_BUILD_ROOT/%{_sharedstatedir}/openvswitch
 
 touch $RPM_BUILD_ROOT%{_sysconfdir}/openvswitch/conf.db
 touch $RPM_BUILD_ROOT%{_sysconfdir}/openvswitch/system-id.conf
+
+# OVN disabled for now by upstream request
+find $RPM_BUILD_ROOT -name "ovn-*" | xargs rm -f
 
 %check
 %if %{with check}
@@ -277,6 +280,9 @@ rm -rf $RPM_BUILD_ROOT
 %exclude %{_datadir}/openvswitch/scripts/ovs-save
 
 %changelog
+* Wed Mar 02 2016 Panu Matilainen <pmatilai@redhat.com> - 2.5.0-1
+- Update to 2.5.0 (#1312617)
+
 * Thu Feb 04 2016 Fedora Release Engineering <releng@fedoraproject.org> - 2.4.0-2
 - Rebuilt for https://fedoraproject.org/wiki/Fedora_24_Mass_Rebuild
 
