@@ -14,7 +14,7 @@
 
 Name: openvswitch
 Version: 2.5.0
-Release: 1%{?snapshot}%{?dist}
+Release: 2%{?snapshot}%{?dist}
 Summary: Open vSwitch daemon/database/utilities
 
 # Nearly all of openvswitch is ASL 2.0.  The bugtool is LGPLv2+, and the
