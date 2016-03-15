@@ -136,6 +136,18 @@ install -d -m 0755 $RPM_BUILD_ROOT/%{_sharedstatedir}/openvswitch
 touch $RPM_BUILD_ROOT%{_sysconfdir}/openvswitch/conf.db
 touch $RPM_BUILD_ROOT%{_sysconfdir}/openvswitch/system-id.conf
 
+# remove unpackaged files
+rm -f $RPM_BUILD_ROOT/%{_bindir}/ovs-benchmark \
+	$RPM_BUILD_ROOT/%{_bindir}/ovs-parse-backtrace \
+	$RPM_BUILD_ROOT/%{_bindir}/ovs-pcap \
+	$RPM_BUILD_ROOT/%{_bindir}/ovs-tcpundump \
+	$RPM_BUILD_ROOT/%{_sbindir}/ovs-vlan-bug-workaround \
+	$RPM_BUILD_ROOT/%{_mandir}/man1/ovs-benchmark.1* \
+	$RPM_BUILD_ROOT/%{_mandir}/man1/ovs-pcap.1* \
+	$RPM_BUILD_ROOT/%{_mandir}/man1/ovs-tcpundump.1* \
+	$RPM_BUILD_ROOT/%{_mandir}/man8/ovs-vlan-bug-workaround.8* \
+	$RPM_BUILD_ROOT/%{_datadir}/openvswitch/scripts/ovs-save
+
 # OVN disabled for now by upstream request
 find $RPM_BUILD_ROOT -name "ovn-*" | xargs rm -f
 
@@ -243,9 +255,6 @@ rm -rf $RPM_BUILD_ROOT
 %{_sbindir}/ovs-bugtool
 %{_sbindir}/ovs-vswitchd
 %{_sbindir}/ovsdb-server
-%{_mandir}/man1/ovs-benchmark.1*
-%{_mandir}/man1/ovs-pcap.1*
-%{_mandir}/man1/ovs-tcpundump.1*
 %{_mandir}/man1/ovsdb-client.1*
 %{_mandir}/man1/ovsdb-server.1*
 %{_mandir}/man1/ovsdb-tool.1*
@@ -268,18 +277,11 @@ rm -rf $RPM_BUILD_ROOT
 /var/lib/openvswitch
 /var/log/openvswitch
 %ghost %attr(755,root,root) %{_rundir}/openvswitch
-%exclude %{_bindir}/ovs-benchmark
-%exclude %{_bindir}/ovs-parse-backtrace
-%exclude %{_bindir}/ovs-pcap
-%exclude %{_bindir}/ovs-tcpundump
-%exclude %{_sbindir}/ovs-vlan-bug-workaround
-%exclude %{_mandir}/man1/ovs-benchmark.1.gz
-%exclude %{_mandir}/man1/ovs-pcap.1.gz
-%exclude %{_mandir}/man1/ovs-tcpundump.1.gz
-%exclude %{_mandir}/man8/ovs-vlan-bug-workaround.8.gz
-%exclude %{_datadir}/openvswitch/scripts/ovs-save
 
 %changelog
+* Tue Mar 15 2016 Panu Matilainen <pmatilai@redhat.com> - 2.5.0-2
+- Remove unpackaged files instead of excluding (#1281913)
+
 * Wed Mar 02 2016 Panu Matilainen <pmatilai@redhat.com> - 2.5.0-1
 - Update to 2.5.0 (#1312617)
 
