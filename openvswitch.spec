@@ -14,7 +14,7 @@
 
 Name: openvswitch
 Version: 2.5.0
-Release: 2%{?snapshot}%{?dist}
+Release: 3%{?snapshot}%{?dist}
 Summary: Open vSwitch daemon/database/utilities
 
 # Nearly all of openvswitch is ASL 2.0.  The bugtool is LGPLv2+, and the
@@ -279,6 +279,9 @@ rm -rf $RPM_BUILD_ROOT
 %ghost %attr(755,root,root) %{_rundir}/openvswitch
 
 %changelog
+* Tue Jul 19 2016 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 2.5.0-3
+- https://fedoraproject.org/wiki/Changes/Automatic_Provides_for_Python_RPM_Packages
+
 * Tue Mar 15 2016 Panu Matilainen <pmatilai@redhat.com> - 2.5.0-2
 - Remove unpackaged files instead of excluding (#1281913)
 
