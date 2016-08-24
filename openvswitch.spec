@@ -14,7 +14,7 @@
 
 Name: openvswitch
 Version: 2.5.0
-Release: 3%{?snapshot}%{?dist}
+Release: 4%{?snapshot}%{?dist}
 Summary: Open vSwitch daemon/database/utilities
 
 # Nearly all of openvswitch is ASL 2.0.  The bugtool is LGPLv2+, and the
@@ -45,7 +45,13 @@ Requires(preun): systemd-units
 Requires(postun): systemd-units
 Obsoletes: openvswitch-controller <= 0:2.1.0-1
 
+# test-suite is broken for big endians
+# https://bugzilla.redhat.com/show_bug.cgi?id=1105458#c10
+%ifnarch ppc ppc64 ppc64p7 s390 s390x
 %bcond_without check
+%else
+%bcond_with check
+%endif
 
 %description
 Open vSwitch provides standard network bridging functions and
@@ -279,6 +285,9 @@ rm -rf $RPM_BUILD_ROOT
 %ghost %attr(755,root,root) %{_rundir}/openvswitch
 
 %changelog
+* Wed Aug 24 2016 Dan Horák <dan[at]danny.cz> - 2.5.0-4
+- don't run the test-suite for big endian arches
+
 * Tue Jul 19 2016 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 2.5.0-3
 - https://fedoraproject.org/wiki/Changes/Automatic_Provides_for_Python_RPM_Packages
 
