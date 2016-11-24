@@ -13,7 +13,7 @@
 %global _hardened_build 1
 
 Name: openvswitch
-Version: 2.6.0
+Version: 2.6.1
 Release: 0%{?snapshot}%{?dist}
 Summary: Open vSwitch daemon/database/utilities
 
@@ -461,6 +461,9 @@ rm -rf $RPM_BUILD_ROOT
 %{_unitdir}/ovn-controller-vtep.service
 
 %changelog
+* Thu Nov 24 2016 Flavio Leitner <fbl@redhat.com> - 2.6.1-0
+- Updated to Open vSwitch 2.6.1
+
 * Tue Nov 01 2016 Aaron Conole <aconole@redhat.com> - 2.6.0-0
 - Update to Open vSwitch 2.6.0
 - Enable OVN
