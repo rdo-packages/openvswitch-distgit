@@ -30,7 +30,7 @@ ExcludeArch: ppc
 
 BuildRequires: autoconf automake libtool
 BuildRequires: systemd-units openssl openssl-devel
-BuildRequires: python python-twisted-core python-zope-interface PyQt4 python-six
+BuildRequires: python python-twisted-core python-zope-interface python-six
 BuildRequires: desktop-file-utils
 BuildRequires: groff graphviz
 # make check dependencies
