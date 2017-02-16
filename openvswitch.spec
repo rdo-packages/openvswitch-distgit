@@ -14,7 +14,7 @@
 
 Name: openvswitch
 Version: 2.6.1
-Release: 1%{?snapshot}%{?dist}
+Release: 2%{?snapshot}%{?dist}
 Summary: Open vSwitch daemon/database/utilities
 
 # Nearly all of openvswitch is ASL 2.0.  The bugtool is LGPLv2+, and the
@@ -29,11 +29,15 @@ ExcludeArch: ppc
 
 BuildRequires: autoconf automake libtool
 BuildRequires: systemd-units openssl openssl-devel
-BuildRequires: python python-twisted-core python-zope-interface python-six
+BuildRequires: python2-devel
+BuildRequires: python3-devel
 BuildRequires: desktop-file-utils
 BuildRequires: groff graphviz
 # make check dependencies
+%if %{with check}
+BuildRequires: python2-twisted python2-zope-interface python2-six
 BuildRequires: procps-ng
+%endif
 
 Requires: openssl iproute module-init-tools
 #Upstream kernel commit 4f647e0a3c37b8d5086214128614a136064110c3
@@ -57,21 +61,32 @@ Open vSwitch provides standard network bridging functions and
 support for the OpenFlow protocol for remote per-flow control of
 traffic.
 
-%package -n python-openvswitch
-Summary: Open vSwitch python bindings
+%package -n python2-openvswitch
+Summary: Open vSwitch python2 bindings
 License: ASL 2.0
 BuildArch: noarch
-Requires: python python-six
+Requires: python2 python2-six
+Obsoletes: python-openvswitch < 2.6.1-2
+Provides: python-openvswitch = %{version}-%{release}
 
-%description -n python-openvswitch
+%description -n python2-openvswitch
+Python bindings for the Open vSwitch database
+
+%package -n python3-openvswitch
+Summary: Open vSwitch python3 bindings
+License: ASL 2.0
+BuildArch: noarch
+Requires: python3 python3-six
+
+%description -n python3-openvswitch
 Python bindings for the Open vSwitch database
 
 %package test
 Summary: Open vSwitch testing utilities
 License: ASL 2.0
 BuildArch: noarch
-Requires: python-openvswitch = %{version}-%{release}
-Requires: python python-twisted-core python-twisted-web
+Requires: python2-openvswitch = %{version}-%{release}
+Requires: python2 python2-twisted
 
 %description test
 Utilities that are useful to diagnose performance and connectivity
@@ -127,7 +142,7 @@ Utilities that are use to diagnose and manage the OVN components.
 %package ovn-docker
 Summary: Open vSwitch - Open Virtual Network support
 License: ASL 2.0
-Requires: openvswitch openvswitch-ovn-common python-openvswitch
+Requires: openvswitch openvswitch-ovn-common python2-openvswitch
 
 %description ovn-docker
 Docker network plugins for OVN.
@@ -176,10 +191,13 @@ install -p -m 0755 rhel/etc_sysconfig_network-scripts_ifdown-ovs \
 install -p -m 0755 rhel/etc_sysconfig_network-scripts_ifup-ovs \
         $RPM_BUILD_ROOT/%{_sysconfdir}/sysconfig/network-scripts/ifup-ovs
 
-install -d -m 0755 $RPM_BUILD_ROOT%{python_sitelib}
-mv $RPM_BUILD_ROOT/%{_datadir}/openvswitch/python/* \
-   $RPM_BUILD_ROOT%{python_sitelib}
-rmdir $RPM_BUILD_ROOT/%{_datadir}/openvswitch/python/
+install -d -m 0755 $RPM_BUILD_ROOT%{python2_sitelib}
+install -d -m 0755 $RPM_BUILD_ROOT%{python3_sitelib}
+cp -a $RPM_BUILD_ROOT/%{_datadir}/openvswitch/python/* \
+   $RPM_BUILD_ROOT%{python2_sitelib}
+cp -a $RPM_BUILD_ROOT/%{_datadir}/openvswitch/python/ovs \
+   $RPM_BUILD_ROOT%{python3_sitelib}
+rm -rf $RPM_BUILD_ROOT/%{_datadir}/openvswitch/python/
 
 install -d -m 0755 $RPM_BUILD_ROOT/%{_sharedstatedir}/openvswitch
 
@@ -335,8 +353,12 @@ rm -rf $RPM_BUILD_ROOT
 %endif
 
 
-%files -n python-openvswitch
-%{python_sitelib}/ovs
+%files -n python2-openvswitch
+%{python2_sitelib}/ovs
+%doc COPYING
+
+%files -n python3-openvswitch
+%{python3_sitelib}/ovs
 %doc COPYING
 
 %files test
@@ -352,7 +374,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/man1/ovs-pcap.1*
 %{_mandir}/man8/ovs-tcpdump.8*
 %{_mandir}/man1/ovs-tcpundump.1*
-%{python_sitelib}/ovstest
+%{python2_sitelib}/ovstest
 
 %files devel
 %{_libdir}/*.a
@@ -460,6 +482,9 @@ rm -rf $RPM_BUILD_ROOT
 %{_unitdir}/ovn-controller-vtep.service
 
 %changelog
+* Thu Feb 16 2017 Timothy Redaelli <tredaelli@redhat.com> - 2.6.1-2
+- Added python3-openvswitch and renamed python-openvswitch to python2-openvswitch
+
 * Sat Feb 11 2017 Fedora Release Engineering <releng@fedoraproject.org> - 2.6.1-1
 - Rebuilt for https://fedoraproject.org/wiki/Fedora_26_Mass_Rebuild
 
