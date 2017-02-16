@@ -20,7 +20,6 @@ Summary: Open vSwitch daemon/database/utilities
 # Nearly all of openvswitch is ASL 2.0.  The bugtool is LGPLv2+, and the
 # lib/sflow*.[ch] files are SISSL
 # datapath/ is GPLv2 (although not built into any of the binary packages)
-# python/compat is Python (although not built into any of the binary packages)
 License: ASL 2.0 and LGPLv2+ and SISSL
 URL: http://openvswitch.org
 Source0: http://openvswitch.org/releases/%{name}-%{version}%{?snap_gitsha}.tar.gz
