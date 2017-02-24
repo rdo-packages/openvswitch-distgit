@@ -9,12 +9,15 @@
 # option. For example:
 # rpmbuild -bb --with check openvswitch.spec
 
+# To disable DPDK support, specify '--without dpdk' when building
+%bcond_without dpdk
+
 # Enable PIE, bz#955181
 %global _hardened_build 1
 
 Name: openvswitch
-Version: 2.6.1
-Release: 2%{?snapshot}%{?dist}
+Version: 2.7.0
+Release: 0%{?snapshot}%{?dist}
 Summary: Open vSwitch daemon/database/utilities
 
 # Nearly all of openvswitch is ASL 2.0.  The bugtool is LGPLv2+, and the
@@ -25,7 +28,11 @@ URL: http://openvswitch.org
 Source0: http://openvswitch.org/releases/%{name}-%{version}%{?snap_gitsha}.tar.gz
 Source1: ovs-snapshot.sh
 
+%if %{with dpdk}
+ExclusiveArch: x86_64 i686 aarch64 ppc64le
+%else
 ExcludeArch: ppc
+%endif
 
 BuildRequires: autoconf automake libtool
 BuildRequires: systemd-units openssl openssl-devel
@@ -37,6 +44,11 @@ BuildRequires: groff graphviz
 %if %{with check}
 BuildRequires: python2-twisted python2-zope-interface python2-six
 BuildRequires: procps-ng
+%endif
+%if %{with dpdk}
+# DPDK driver dependencies
+BuildRequires: libpcap-devel numactl-devel
+BuildRequires: dpdk-devel >= 16.11
 %endif
 
 Requires: openssl iproute module-init-tools
@@ -157,7 +169,13 @@ sed -i.old -e "s/^AC_INIT(openvswitch,.*,/AC_INIT(openvswitch, %{version},/" con
 ./boot.sh
 %endif
 
-%configure --enable-ssl --with-pkidir=%{_sharedstatedir}/openvswitch/pki
+%configure \
+  --enable-ssl \
+%if %{with dpdk}
+  --with-dpdk=$(dirname %{_datadir}/dpdk/*/.config) \
+%endif
+  --with-pkidir=%{_sharedstatedir}/openvswitch/pki
+
 make %{?_smp_mflags}
 
 %install
@@ -426,6 +444,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/man1/ovsdb-tool.1*
 %{_mandir}/man5/ovs-vswitchd.conf.db.5*
 %{_mandir}/man5/vtep.5*
+%{_mandir}/man7/ovs-fields.7*
 %{_mandir}/man8/vtep-ctl.8*
 %{_mandir}/man8/ovs-appctl.8*
 %{_mandir}/man8/ovs-bugtool.8*
@@ -438,8 +457,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/man8/ovs-vswitchd.8*
 %{_mandir}/man8/ovs-parse-backtrace.8*
 %{_mandir}/man8/ovs-testcontroller.8*
-%doc COPYING DESIGN.md INSTALL.SSL.md NOTICE README.md WHY-OVS.md
-%doc FAQ.md NEWS INSTALL.DPDK.md rhel/README.RHEL
+%doc COPYING NOTICE README.rst NEWS rhel/README.RHEL.rst
 /var/lib/openvswitch
 /var/log/openvswitch
 %ghost %attr(755,root,root) %{_rundir}/openvswitch
@@ -453,6 +471,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_bindir}/ovn-sbctl
 %{_bindir}/ovn-trace
 %{_datadir}/openvswitch/scripts/ovn-ctl
+%{_datadir}/openvswitch/scripts/ovndb-servers.ocf
 %{_datadir}/openvswitch/scripts/ovn-bugtool-nbctl-show
 %{_datadir}/openvswitch/scripts/ovn-bugtool-sbctl-lflow-list
 %{_datadir}/openvswitch/scripts/ovn-bugtool-sbctl-show
@@ -482,6 +501,10 @@ rm -rf $RPM_BUILD_ROOT
 %{_unitdir}/ovn-controller-vtep.service
 
 %changelog
+* Fri Feb 24 2017 Timothy Redaelli <tredaelli@redhat.com> - 2.7.0-0
+- Updated to Open vSwitch 2.7.0 (#1426596)
+- Enable DPDK support
+
 * Thu Feb 16 2017 Timothy Redaelli <tredaelli@redhat.com> - 2.6.1-2
 - Added python3-openvswitch and renamed python-openvswitch to python2-openvswitch
 
