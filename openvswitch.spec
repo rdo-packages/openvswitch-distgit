@@ -12,6 +12,14 @@
 # To disable DPDK support, specify '--without dpdk' when building
 %bcond_without dpdk
 
+# test-suite is broken for big endians
+# https://bugzilla.redhat.com/show_bug.cgi?id=1105458#c10
+%ifnarch ppc ppc64 ppc64p7 s390 s390x
+%bcond_without check
+%else
+%bcond_with check
+%endif
+
 # Enable PIE, bz#955181
 %global _hardened_build 1
 
@@ -36,13 +44,13 @@ ExcludeArch: ppc
 
 BuildRequires: autoconf automake libtool
 BuildRequires: systemd-units openssl openssl-devel
-BuildRequires: python2-devel
+BuildRequires: python2-devel python2-six
 BuildRequires: python3-devel
 BuildRequires: desktop-file-utils
 BuildRequires: groff graphviz
 # make check dependencies
 %if %{with check}
-BuildRequires: python2-twisted python2-zope-interface python2-six
+BuildRequires: python2-twisted python2-zope-interface
 BuildRequires: procps-ng
 %endif
 %if %{with dpdk}
@@ -59,14 +67,6 @@ Requires(post): systemd-units
 Requires(preun): systemd-units
 Requires(postun): systemd-units
 Obsoletes: openvswitch-controller <= 0:2.1.0-1
-
-# test-suite is broken for big endians
-# https://bugzilla.redhat.com/show_bug.cgi?id=1105458#c10
-%ifnarch ppc ppc64 ppc64p7 s390 s390x
-%bcond_without check
-%else
-%bcond_with check
-%endif
 
 %description
 Open vSwitch provides standard network bridging functions and
