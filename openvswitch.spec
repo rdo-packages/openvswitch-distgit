@@ -23,9 +23,13 @@
 # Enable PIE, bz#955181
 %global _hardened_build 1
 
+%define dpdkver 16.11.1
+%define dpdkdir dpdk-stable
+%define dpdksver %(echo %{dpdkver} | cut -d. -f-2)
+
 Name: openvswitch
 Version: 2.7.0
-Release: 0%{?snapshot}%{?dist}
+Release: 1%{?snapshot}%{?dist}
 Summary: Open vSwitch daemon/database/utilities
 
 # Nearly all of openvswitch is ASL 2.0.  The bugtool is LGPLv2+, and the
@@ -34,10 +38,37 @@ Summary: Open vSwitch daemon/database/utilities
 License: ASL 2.0 and LGPLv2+ and SISSL
 URL: http://openvswitch.org
 Source0: http://openvswitch.org/releases/%{name}-%{version}%{?snap_gitsha}.tar.gz
-Source1: ovs-snapshot.sh
+Source1: http://fast.dpdk.org/rel/dpdk-%{dpdkver}.tar.gz
+Source2: ovs-snapshot.sh
 
 %if %{with dpdk}
 ExclusiveArch: x86_64 i686 aarch64 ppc64le
+
+# machine_arch maps between rpm and dpdk arch name, often same as _target_cpu
+# machine_tmpl is the config template machine name, often "native"
+# machine is the actual machine name used in the dpdk make system
+%ifarch x86_64
+%define machine_arch x86_64
+%define machine_tmpl native
+%define machine default
+%endif
+%ifarch i686
+%define machine_arch i686
+%define machine_tmpl native
+%define machine atm
+%endif
+%ifarch aarch64
+%define machine_arch arm64
+%define machine_tmpl armv8a
+%define machine armv8a
+%endif
+%ifarch ppc64le
+%define machine_arch ppc_64
+%define machine_tmpl power8
+%define machine power8
+%endif
+
+%define dpdktarget %{machine_arch}-%{machine_tmpl}-linuxapp-gcc
 %else
 ExcludeArch: ppc
 %endif
@@ -45,7 +76,7 @@ ExcludeArch: ppc
 BuildRequires: autoconf automake libtool
 BuildRequires: systemd-units openssl openssl-devel
 BuildRequires: python2-devel python2-six
-BuildRequires: python3-devel
+BuildRequires: python3-devel python3-six
 BuildRequires: desktop-file-utils
 BuildRequires: groff graphviz
 # make check dependencies
@@ -56,7 +87,6 @@ BuildRequires: procps-ng
 %if %{with dpdk}
 # DPDK driver dependencies
 BuildRequires: libpcap-devel numactl-devel
-BuildRequires: dpdk-devel >= 16.11
 %endif
 
 Requires: openssl iproute module-init-tools
@@ -160,9 +190,106 @@ Requires: openvswitch openvswitch-ovn-common python2-openvswitch
 Docker network plugins for OVN.
 
 %prep
-%setup -q -n %{name}-%{version}%{?snap_gitsha}
+%setup -q -n %{name}-%{version}%{?snap_gitsha} -a 1
 
 %build
+%if %{with dpdk}
+# Lets build DPDK first
+cd %{dpdkdir}-%{dpdkver}
+function setconf()
+{
+    cf=%{dpdktarget}/.config
+    if grep -q $1 $cf; then
+        sed -i "s:^$1=.*$:$1=$2:g" $cf
+    else
+        echo $1=$2 >> $cf
+    fi
+}
+
+# In case dpdk-devel is installed
+unset RTE_SDK RTE_INCLUDE RTE_TARGET
+
+# Avoid appending second -Wall to everything, it breaks upstream warning
+# disablers in makefiles. Strip explicit -march= from optflags since they
+# will only guarantee build failures, DPDK is picky with that.
+export EXTRA_CFLAGS="$(echo %{optflags} | sed -e 's:-Wall::g' -e 's:-march=[[:alnum:]]* ::g') -Wformat -fPIC"
+
+# DPDK defaults to using builder-specific compiler flags.  However,
+# the config has been changed by specifying CONFIG_RTE_MACHINE=default
+# in order to build for a more generic host.  NOTE: It is possible that
+# the compiler flags used still won't work for all Fedora-supported
+# machines, but runtime checks in DPDK will catch those situations.
+
+make V=1 O=%{dpdktarget} T=%{dpdktarget} %{?_smp_mflags} config
+
+# DPDK defaults to optimizing for the builder host we need generic binaries
+setconf CONFIG_RTE_MACHINE '"%{machine}"'
+
+# Disable DPDK libraries not needed by OVS
+setconf CONFIG_RTE_LIBRTE_TIMER n
+setconf CONFIG_RTE_LIBRTE_CFGFILE n
+setconf CONFIG_RTE_LIBRTE_JOBSTATS n
+setconf CONFIG_RTE_LIBRTE_LPM n
+setconf CONFIG_RTE_LIBRTE_ACL n
+setconf CONFIG_RTE_LIBRTE_POWER n
+setconf CONFIG_RTE_LIBRTE_DISTRIBUTOR n
+setconf CONFIG_RTE_LIBRTE_REORDER n
+setconf CONFIG_RTE_LIBRTE_PORT n
+setconf CONFIG_RTE_LIBRTE_TABLE n
+setconf CONFIG_RTE_LIBRTE_PIPELINE n
+setconf CONFIG_RTE_LIBRTE_KNI n
+setconf CONFIG_RTE_LIBRTE_CRYPTODEV n
+
+# Disable DPDK applications not needed by OVS
+setconf CONFIG_RTE_APP_TEST n
+setconf CONFIG_RTE_APP_CRYPTO_PERF n
+
+# Enable DPDK libraries needed by OVS
+setconf CONFIG_RTE_LIBRTE_VHOST_NUMA y
+setconf CONFIG_RTE_LIBRTE_PMD_PCAP y
+
+# Disable PMDs that are either not needed or not stable
+setconf CONFIG_RTE_LIBRTE_PMD_VHOST n
+setconf CONFIG_RTE_LIBRTE_PMD_NULL_CRYPTO n
+# BNX2X driver is not stable
+setconf CONFIG_RTE_LIBRTE_BNX2X_PMD n
+
+# Disable virtio user as not used by OVS
+setconf CONFIG_RTE_VIRTIO_USER n
+
+# Disable kernel modules
+setconf CONFIG_RTE_EAL_IGB_UIO n
+setconf CONFIG_RTE_KNI_KMOD n
+
+# Disable experimental stuff
+setconf CONFIG_RTE_NEXT_ABI n
+
+# Disable some PMDs on fdProd
+setconf CONFIG_RTE_LIBRTE_BNXT_PMD n
+setconf CONFIG_RTE_LIBRTE_ENA_PMD n
+setconf CONFIG_RTE_LIBRTE_QEDE_PMD n
+
+make V=1 O=%{dpdktarget} %{?_smp_mflags}
+
+# Generate a list of supported drivers, its hard to tell otherwise.
+cat << EOF > README.DPDK-PMDS
+DPDK drivers included in this package:
+
+EOF
+
+for f in $(ls %{machine_arch}-%{machine_tmpl}-linuxapp-gcc/lib/lib*_pmd_*); do
+    basename ${f} | cut -c12- | cut -d. -f1 | tr [:lower:] [:upper:]
+done >> README.DPDK-PMDS
+
+cat << EOF >> README.DPDK-PMDS
+
+For further information about the drivers, see
+http://dpdk.org/doc/guides-%{dpdksver}/nics/index.html
+EOF
+
+cd -
+%endif
+
 %if 0%{?snap_gitsha:1}
 # fix the snapshot unreleased version to be the released one.
 sed -i.old -e "s/^AC_INIT(openvswitch,.*,/AC_INIT(openvswitch, %{version},/" configure.ac
@@ -172,7 +299,7 @@ sed -i.old -e "s/^AC_INIT(openvswitch,.*,/AC_INIT(openvswitch, %{version},/" con
 %configure \
   --enable-ssl \
 %if %{with dpdk}
-  --with-dpdk=$(dirname %{_datadir}/dpdk/*/.config) \
+  --with-dpdk=$(pwd)/%{dpdkdir}-%{dpdkver}/%{dpdktarget} \
 %endif
   --with-pkidir=%{_sharedstatedir}/openvswitch/pki
 
@@ -501,6 +628,10 @@ rm -rf $RPM_BUILD_ROOT
 %{_unitdir}/ovn-controller-vtep.service
 
 %changelog
+* Thu May 18 2017 Timothy Redaelli <tredaelli@redhat.com> - 2.7.0-1
+- Link statically with DPDK 16.11.1 (#1451476)
+- Added python3-six to BuildRequires in order to launch python3 tests too
+
 * Fri Feb 24 2017 Timothy Redaelli <tredaelli@redhat.com> - 2.7.0-0
 - Updated to Open vSwitch 2.7.0 (#1426596)
 - Enable DPDK support
