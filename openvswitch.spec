@@ -42,7 +42,7 @@ Source1: http://fast.dpdk.org/rel/dpdk-%{dpdkver}.tar.gz
 Source2: ovs-snapshot.sh
 
 %if %{with dpdk}
-ExclusiveArch: x86_64 i686 aarch64 ppc64le
+%define dpdkarches x86_64 i686 aarch64 ppc64le
 
 # machine_arch maps between rpm and dpdk arch name, often same as _target_cpu
 # machine_tmpl is the config template machine name, often "native"
@@ -69,9 +69,8 @@ ExclusiveArch: x86_64 i686 aarch64 ppc64le
 %endif
 
 %define dpdktarget %{machine_arch}-%{machine_tmpl}-linuxapp-gcc
-%else
-ExcludeArch: ppc
 %endif
+ExcludeArch: ppc
 
 BuildRequires: autoconf automake libtool
 BuildRequires: systemd-units openssl openssl-devel
@@ -85,8 +84,10 @@ BuildRequires: python2-twisted python2-zope-interface
 BuildRequires: procps-ng
 %endif
 %if %{with dpdk}
+%ifarch %{dpdkarches}
 # DPDK driver dependencies
 BuildRequires: libpcap-devel numactl-devel
+%endif
 %endif
 
 Requires: openssl iproute module-init-tools
@@ -194,6 +195,7 @@ Docker network plugins for OVN.
 
 %build
 %if %{with dpdk}
+%ifarch %{dpdkarches}
 # Lets build DPDK first
 cd %{dpdkdir}-%{dpdkver}
 function setconf()
@@ -289,6 +291,7 @@ EOF
 
 cd -
 %endif
+%endif
 
 %if 0%{?snap_gitsha:1}
 # fix the snapshot unreleased version to be the released one.
@@ -299,7 +302,9 @@ sed -i.old -e "s/^AC_INIT(openvswitch,.*,/AC_INIT(openvswitch, %{version},/" con
 %configure \
   --enable-ssl \
 %if %{with dpdk}
+%ifarch %{dpdkarches}
   --with-dpdk=$(pwd)/%{dpdkdir}-%{dpdkver}/%{dpdktarget} \
+%endif
 %endif
   --with-pkidir=%{_sharedstatedir}/openvswitch/pki
 
@@ -630,6 +635,7 @@ rm -rf $RPM_BUILD_ROOT
 %changelog
 * Thu May 18 2017 Timothy Redaelli <tredaelli@redhat.com> - 2.7.0-1
 - Link statically with DPDK 16.11.1 (#1451476)
+- Build OVS without DPDK support on all architectures not supported by DPDK
 - Added python3-six to BuildRequires in order to launch python3 tests too
 
 * Fri Feb 24 2017 Timothy Redaelli <tredaelli@redhat.com> - 2.7.0-0
