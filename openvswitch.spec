@@ -299,7 +299,8 @@ sed -i.old -e "s/^AC_INIT(openvswitch,.*,/AC_INIT(openvswitch, %{version},/" con
 ./boot.sh
 %endif
 
-# FIXME fix python3 locale and remove ovs_cv_python3=no
+export PYTHONCOERCECLOCALE=0
+
 %configure \
   --enable-ssl \
 %if %{with dpdk}
@@ -307,8 +308,7 @@ sed -i.old -e "s/^AC_INIT(openvswitch,.*,/AC_INIT(openvswitch, %{version},/" con
   --with-dpdk=$(pwd)/%{dpdkdir}-%{dpdkver}/%{dpdktarget} \
 %endif
 %endif
-  --with-pkidir=%{_sharedstatedir}/openvswitch/pki \
-  ovs_cv_python3=no
+  --with-pkidir=%{_sharedstatedir}/openvswitch/pki
 
 make %{?_smp_mflags}
 
@@ -366,6 +366,8 @@ rm -f $RPM_BUILD_ROOT/%{_bindir}/ovs-benchmark \
 
 %check
 %if %{with check}
+    export PYTHONCOERCECLOCALE=0
+
     if make check TESTSUITEFLAGS='%{_smp_mflags}' ||
        make check TESTSUITEFLAGS='--recheck'; then :;
     else
@@ -639,7 +641,6 @@ rm -rf $RPM_BUILD_ROOT
 - Link statically with DPDK 16.11.1 (#1451476)
 - Build OVS without DPDK support on all architectures not supported by DPDK
 - Added python3-six to BuildRequires in order to launch python3 tests too
-- FIXME Disable python3 tests (fails on f26 and rawhide with python 3.6)
 
 * Fri Feb 24 2017 Timothy Redaelli <tredaelli@redhat.com> - 2.7.0-0
 - Updated to Open vSwitch 2.7.0 (#1426596)
