@@ -643,7 +643,7 @@ rm -rf $RPM_BUILD_ROOT
 - Build OVS without DPDK support on all architectures not supported by DPDK
 - Added python3-six to BuildRequires in order to launch python3 tests too
 - Export PYTHONCOERCECLOCALE=0 in order to workaround an incompatibility
-  between Python 3.6.0 (with PEP 538) on Fedora 26+ and testsuite
+  between Python 3.6.0 (with PEP 538) on Fedora 26+ and testsuite (#1454364)
 - Disable tests on armv7hl
 
 * Fri Feb 24 2017 Timothy Redaelli <tredaelli@redhat.com> - 2.7.0-0
