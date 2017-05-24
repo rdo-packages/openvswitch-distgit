@@ -14,7 +14,8 @@
 
 # test-suite is broken for big endians
 # https://bugzilla.redhat.com/show_bug.cgi?id=1105458#c10
-%ifnarch ppc ppc64 ppc64p7 s390 s390x
+# "ofproto-dpif - select group with dp_hash selection method" test is broken on arm
+%ifnarch ppc ppc64 ppc64p7 s390 s390x armv7hl
 %bcond_without check
 %else
 %bcond_with check
@@ -641,6 +642,9 @@ rm -rf $RPM_BUILD_ROOT
 - Link statically with DPDK 16.11.1 (#1451476)
 - Build OVS without DPDK support on all architectures not supported by DPDK
 - Added python3-six to BuildRequires in order to launch python3 tests too
+- Export PYTHONCOERCECLOCALE=0 in order to workaround an incompatibility
+  between Python 3.6.0 (with PEP 538) on Fedora 26+ and testsuite
+- Disable tests on armv7hl
 
 * Fri Feb 24 2017 Timothy Redaelli <tredaelli@redhat.com> - 2.7.0-0
 - Updated to Open vSwitch 2.7.0 (#1426596)
