@@ -30,7 +30,7 @@
 
 Name: openvswitch
 Version: 2.7.0
-Release: 1%{?snapshot}%{?dist}
+Release: 2%{?snapshot}%{?dist}
 Summary: Open vSwitch daemon/database/utilities
 
 # Nearly all of openvswitch is ASL 2.0.  The bugtool is LGPLv2+, and the
@@ -149,6 +149,7 @@ files needed to build an external application.
 Summary: Open vSwitch - Open Virtual Network support
 License: ASL 2.0
 Requires: openvswitch openvswitch-ovn-common
+Requires: firewalld-filesystem
 
 %description ovn-central
 OVN, the Open Virtual Network, is a system to support virtual network
@@ -160,6 +161,7 @@ overlays and security groups.
 Summary: Open vSwitch - Open Virtual Network support
 License: ASL 2.0
 Requires: openvswitch openvswitch-ovn-common
+Requires: firewalld-filesystem
 
 %description ovn-host
 OVN, the Open Virtual Network, is a system to support virtual network
@@ -353,6 +355,12 @@ cp -a $RPM_BUILD_ROOT/%{_datadir}/openvswitch/python/ovs \
 rm -rf $RPM_BUILD_ROOT/%{_datadir}/openvswitch/python/
 
 install -d -m 0755 $RPM_BUILD_ROOT/%{_sharedstatedir}/openvswitch
+
+install -d -m 0755 $RPM_BUILD_ROOT%{_prefix}/lib/firewalld/services/
+install -p -m 0644 rhel/usr_lib_firewalld_services_ovn-central-firewall-service.xml \
+        $RPM_BUILD_ROOT%{_prefix}/lib/firewalld/services/ovn-central-firewall-service.xml
+install -p -m 0644 rhel/usr_lib_firewalld_services_ovn-host-firewall-service.xml \
+        $RPM_BUILD_ROOT%{_prefix}/lib/firewalld/services/ovn-host-firewall-service.xml
 
 touch $RPM_BUILD_ROOT%{_sysconfdir}/openvswitch/conf.db
 touch $RPM_BUILD_ROOT%{_sysconfdir}/openvswitch/system-id.conf
@@ -626,11 +634,13 @@ rm -rf $RPM_BUILD_ROOT
 %config %{_datadir}/openvswitch/ovn-nb.ovsschema
 %config %{_datadir}/openvswitch/ovn-sb.ovsschema
 %{_unitdir}/ovn-northd.service
+%{_prefix}/lib/firewalld/services/ovn-central-firewall-service.xml
 
 %files ovn-host
 %{_bindir}/ovn-controller
 %{_mandir}/man8/ovn-controller.8*
 %{_unitdir}/ovn-controller.service
+%{_prefix}/lib/firewalld/services/ovn-host-firewall-service.xml
 
 %files ovn-vtep
 %{_bindir}/ovn-controller-vtep
@@ -638,6 +648,9 @@ rm -rf $RPM_BUILD_ROOT
 %{_unitdir}/ovn-controller-vtep.service
 
 %changelog
+* Mon May 29 2017 Timothy Redaelli <tredaelli@redhat.com> - 2.7.0-2
+- Install OVN firewalld rules
+
 * Thu May 18 2017 Timothy Redaelli <tredaelli@redhat.com> - 2.7.0-1
 - Link statically with DPDK 16.11.1 (#1451476)
 - Build OVS without DPDK support on all architectures not supported by DPDK
