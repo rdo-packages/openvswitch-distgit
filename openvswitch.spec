@@ -30,7 +30,7 @@
 
 Name: openvswitch
 Version: 2.7.0
-Release: 2%{?snapshot}%{?dist}
+Release: 3%{?snapshot}%{?dist}
 Summary: Open vSwitch daemon/database/utilities
 
 # Nearly all of openvswitch is ASL 2.0.  The bugtool is LGPLv2+, and the
@@ -41,6 +41,8 @@ URL: http://openvswitch.org
 Source0: http://openvswitch.org/releases/%{name}-%{version}%{?snap_gitsha}.tar.gz
 Source1: http://fast.dpdk.org/rel/dpdk-%{dpdkver}.tar.gz
 Source2: ovs-snapshot.sh
+
+Patch1: openvswitch-CVE-2017-9214.patch
 
 %if %{with dpdk}
 %define dpdkarches x86_64 i686 aarch64 ppc64le
@@ -194,7 +196,7 @@ Requires: openvswitch openvswitch-ovn-common python2-openvswitch
 Docker network plugins for OVN.
 
 %prep
-%setup -q -n %{name}-%{version}%{?snap_gitsha} -a 1
+%autosetup -n %{name}-%{version}%{?snap_gitsha} -a 1 -p 1
 
 %build
 %if %{with dpdk}
@@ -648,6 +650,10 @@ rm -rf $RPM_BUILD_ROOT
 %{_unitdir}/ovn-controller-vtep.service
 
 %changelog
+* Wed May 31 2017 Timothy Redaelli <tredaelli@redhat.com> - 2.7.0-3
+- Backport fix for CVE-2017-9214 (#1456797)
+- Use %%autosetup instead of %%setup
+
 * Mon May 29 2017 Timothy Redaelli <tredaelli@redhat.com> - 2.7.0-2
 - Install OVN firewalld rules
 
