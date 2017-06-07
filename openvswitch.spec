@@ -61,6 +61,8 @@
 Name: openvswitch
 Summary: Open vSwitch daemon/database/utilities
 URL: http://www.openvswitch.org/
+# Carried over from 2.6.1 CBS builds, introduced to win over 2.6.90
+Epoch:   1
 Version: 2.10.0
 Release: 4%{?commit0:.%{date}git%{shortcommit0}}%{?dist}
 
@@ -161,8 +163,8 @@ Summary: Open vSwitch python2 bindings
 License: ASL 2.0
 Requires: %{_py2} %{_py2}-six
 %if "%{_py2}" == "python2"
-Obsoletes: python-openvswitch < 2.6.1-2
-Provides: python-openvswitch = %{version}-%{release}
+Obsoletes: python-openvswitch < %{epoch}:2.7.2
+Provides: python-openvswitch = %{epoch}:%{version}-%{release}
 %endif
 
 %description -n %{_py2}-openvswitch
@@ -188,7 +190,7 @@ Summary: Open vSwitch testing utilities
 License: ASL 2.0
 BuildArch: noarch
 %if %{with_python2}
-Requires: %{_py2}-openvswitch = %{version}-%{release}
+Requires: %{_py2}-openvswitch = %{epoch}:%{version}-%{release}
 Requires: %{_py2} %{_py2}-twisted%{?rhel:-web}
 %else
 Requires: python3-openvswitch = %{version}-%{release}
