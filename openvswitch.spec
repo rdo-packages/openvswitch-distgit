@@ -30,7 +30,7 @@
 
 Name: openvswitch
 Version: 2.7.0
-Release: 3%{?snapshot}%{?dist}
+Release: 4%{?snapshot}%{?dist}
 Summary: Open vSwitch daemon/database/utilities
 
 # Nearly all of openvswitch is ASL 2.0.  The bugtool is LGPLv2+, and the
@@ -43,6 +43,7 @@ Source1: http://fast.dpdk.org/rel/dpdk-%{dpdkver}.tar.gz
 Source2: ovs-snapshot.sh
 
 Patch1: openvswitch-CVE-2017-9214.patch
+Patch2: tests-Export-PYTHONCOERCECLOCALE-0-for-python3-tests.patch
 
 %if %{with dpdk}
 %define dpdkarches x86_64 i686 aarch64 ppc64le
@@ -304,8 +305,6 @@ sed -i.old -e "s/^AC_INIT(openvswitch,.*,/AC_INIT(openvswitch, %{version},/" con
 ./boot.sh
 %endif
 
-export PYTHONCOERCECLOCALE=0
-
 %configure \
   --enable-ssl \
 %if %{with dpdk}
@@ -377,8 +376,6 @@ rm -f $RPM_BUILD_ROOT/%{_bindir}/ovs-benchmark \
 
 %check
 %if %{with check}
-    export PYTHONCOERCECLOCALE=0
-
     if make check TESTSUITEFLAGS='%{_smp_mflags}' ||
        make check TESTSUITEFLAGS='--recheck'; then :;
     else
@@ -650,6 +647,9 @@ rm -rf $RPM_BUILD_ROOT
 %{_unitdir}/ovn-controller-vtep.service
 
 %changelog
+* Wed Jun 07 2017 Timothy Redaelli <tredaelli@redhat.com> - 2.7.0-4
+- Remove PYTHONCOERCECLOCALE=0 workaround and backport upstream patch (#1454364)
+
 * Wed May 31 2017 Timothy Redaelli <tredaelli@redhat.com> - 2.7.0-3
 - Backport fix for CVE-2017-9214 (#1456797)
 - Use %%autosetup instead of %%setup
