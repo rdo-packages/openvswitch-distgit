@@ -30,7 +30,7 @@
 
 Name: openvswitch
 Version: 2.7.0
-Release: 4%{?snapshot}%{?dist}
+Release: 5%{?snapshot}%{?dist}
 Summary: Open vSwitch daemon/database/utilities
 
 # Nearly all of openvswitch is ASL 2.0.  The bugtool is LGPLv2+, and the
@@ -43,7 +43,9 @@ Source1: http://fast.dpdk.org/rel/dpdk-%{dpdkver}.tar.gz
 Source2: ovs-snapshot.sh
 
 Patch1: openvswitch-CVE-2017-9214.patch
-Patch2: tests-Export-PYTHONCOERCECLOCALE-0-for-python3-tests.patch
+Patch2: openvswitch-CVE-2017-9264.patch
+
+Patch10: tests-Export-PYTHONCOERCECLOCALE-0-for-python3-tests.patch
 
 %if %{with dpdk}
 %define dpdkarches x86_64 i686 aarch64 ppc64le
@@ -647,6 +649,9 @@ rm -rf $RPM_BUILD_ROOT
 %{_unitdir}/ovn-controller-vtep.service
 
 %changelog
+* Tue Jun 13 2017 Timothy Redaelli <tredaelli@redhat.com> - 2.7.0-5
+- Backport fix for CVE-2017-9264 (#1457329)
+
 * Wed Jun 07 2017 Timothy Redaelli <tredaelli@redhat.com> - 2.7.0-4
 - Remove PYTHONCOERCECLOCALE=0 workaround and backport upstream patch (#1454364)
 
