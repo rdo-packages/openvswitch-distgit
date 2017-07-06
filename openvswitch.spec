@@ -24,13 +24,13 @@
 # Enable PIE, bz#955181
 %global _hardened_build 1
 
-%define dpdkver 16.11.1
+%define dpdkver 16.11.2
 %define dpdkdir dpdk-stable
 %define dpdksver %(echo %{dpdkver} | cut -d. -f-2)
 
 Name: openvswitch
-Version: 2.7.0
-Release: 5%{?snapshot}%{?dist}
+Version: 2.7.1
+Release: 1%{?snapshot}%{?dist}
 Summary: Open vSwitch daemon/database/utilities
 
 # Nearly all of openvswitch is ASL 2.0.  The bugtool is LGPLv2+, and the
@@ -41,11 +41,6 @@ URL: http://openvswitch.org
 Source0: http://openvswitch.org/releases/%{name}-%{version}%{?snap_gitsha}.tar.gz
 Source1: http://fast.dpdk.org/rel/dpdk-%{dpdkver}.tar.gz
 Source2: ovs-snapshot.sh
-
-Patch1: openvswitch-CVE-2017-9214.patch
-Patch2: openvswitch-CVE-2017-9264.patch
-
-Patch10: tests-Export-PYTHONCOERCECLOCALE-0-for-python3-tests.patch
 
 %if %{with dpdk}
 %define dpdkarches x86_64 i686 aarch64 ppc64le
@@ -649,6 +644,9 @@ rm -rf $RPM_BUILD_ROOT
 %{_unitdir}/ovn-controller-vtep.service
 
 %changelog
+* Thu Jul 06 2017 Timothy Redaelli <tredaelli@redhat.com> - 2.7.1-1
+- Updated to Open vSwitch 2.7.1 and DPDK 16.11.2 (#1468234)
+
 * Tue Jun 13 2017 Timothy Redaelli <tredaelli@redhat.com> - 2.7.0-5
 - Backport fix for CVE-2017-9264 (#1457329)
 
