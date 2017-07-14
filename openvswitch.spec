@@ -30,7 +30,7 @@
 
 Name: openvswitch
 Version: 2.7.1
-Release: 1%{?snapshot}%{?dist}
+Release: 2%{?snapshot}%{?dist}
 Summary: Open vSwitch daemon/database/utilities
 
 # Nearly all of openvswitch is ASL 2.0.  The bugtool is LGPLv2+, and the
@@ -41,6 +41,10 @@ URL: http://openvswitch.org
 Source0: http://openvswitch.org/releases/%{name}-%{version}%{?snap_gitsha}.tar.gz
 Source1: http://fast.dpdk.org/rel/dpdk-%{dpdkver}.tar.gz
 Source2: ovs-snapshot.sh
+
+Patch1: openvswitch-CVE-2017-9263.patch
+Patch2: openvswitch-CVE-2017-9265.patch
+
 
 %if %{with dpdk}
 %define dpdkarches x86_64 i686 aarch64 ppc64le
@@ -644,6 +648,10 @@ rm -rf $RPM_BUILD_ROOT
 %{_unitdir}/ovn-controller-vtep.service
 
 %changelog
+* Fri Jul 14 2017 Timothy Redaelli <tredaelli@redhat.com> - 2.7.1-2
+- Backport fix for CVE-2017-9263 (#1457327)
+- Backport fix fox CVE-2017-9265 (#1457335)
+
 * Thu Jul 06 2017 Timothy Redaelli <tredaelli@redhat.com> - 2.7.1-1
 - Updated to Open vSwitch 2.7.1 and DPDK 16.11.2 (#1468234)
 
