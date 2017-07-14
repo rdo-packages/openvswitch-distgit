@@ -650,7 +650,7 @@ rm -rf $RPM_BUILD_ROOT
 %changelog
 * Fri Jul 14 2017 Timothy Redaelli <tredaelli@redhat.com> - 2.7.1-2
 - Backport fix for CVE-2017-9263 (#1457327)
-- Backport fix fox CVE-2017-9265 (#1457335)
+- Backport fix for CVE-2017-9265 (#1457335)
 
 * Thu Jul 06 2017 Timothy Redaelli <tredaelli@redhat.com> - 2.7.1-1
 - Updated to Open vSwitch 2.7.1 and DPDK 16.11.2 (#1468234)
