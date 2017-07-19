@@ -29,8 +29,8 @@
 %define dpdksver %(echo %{dpdkver} | cut -d. -f-2)
 
 Name: openvswitch
-Version: 2.7.1
-Release: 2%{?snapshot}%{?dist}
+Version: 2.7.2
+Release: 1%{?snapshot}%{?dist}
 Summary: Open vSwitch daemon/database/utilities
 
 # Nearly all of openvswitch is ASL 2.0.  The bugtool is LGPLv2+, and the
@@ -41,9 +41,6 @@ URL: http://openvswitch.org
 Source0: http://openvswitch.org/releases/%{name}-%{version}%{?snap_gitsha}.tar.gz
 Source1: http://fast.dpdk.org/rel/dpdk-%{dpdkver}.tar.gz
 Source2: ovs-snapshot.sh
-
-Patch1: openvswitch-CVE-2017-9263.patch
-Patch2: openvswitch-CVE-2017-9265.patch
 
 
 %if %{with dpdk}
@@ -364,6 +361,10 @@ install -p -m 0644 rhel/usr_lib_firewalld_services_ovn-central-firewall-service.
 install -p -m 0644 rhel/usr_lib_firewalld_services_ovn-host-firewall-service.xml \
         $RPM_BUILD_ROOT%{_prefix}/lib/firewalld/services/ovn-host-firewall-service.xml
 
+install -d -m 0755 $RPM_BUILD_ROOT%{_prefix}/lib/ocf/resource.d/ovn
+ln -s %{_datadir}/openvswitch/scripts/ovndb-servers.ocf \
+      $RPM_BUILD_ROOT%{_prefix}/lib/ocf/resource.d/ovn/ovndb-servers
+
 touch $RPM_BUILD_ROOT%{_sysconfdir}/openvswitch/conf.db
 touch $RPM_BUILD_ROOT%{_sysconfdir}/openvswitch/system-id.conf
 
@@ -627,6 +628,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/man8/ovn-sbctl.8*
 %{_mandir}/man5/ovn-nb.5*
 %{_mandir}/man5/ovn-sb.5*
+%{_prefix}/lib/ocf/resource.d/ovn/ovndb-servers
 
 %files ovn-central
 %{_bindir}/ovn-northd
@@ -648,6 +650,10 @@ rm -rf $RPM_BUILD_ROOT
 %{_unitdir}/ovn-controller-vtep.service
 
 %changelog
+* Wed Jul 19 2017 Timothy Redaelli <tredaelli@redhat.com> - 2.7.2-1
+- Update to Open vSwitch 2.7.2
+- Add a symlink of the OCF script in the OCF resources folder
+
 * Fri Jul 14 2017 Timothy Redaelli <tredaelli@redhat.com> - 2.7.1-2
 - Backport fix for CVE-2017-9263 (#1457327)
 - Backport fix for CVE-2017-9265 (#1457335)
