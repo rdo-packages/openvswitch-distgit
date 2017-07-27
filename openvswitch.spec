@@ -30,7 +30,7 @@
 
 Name: openvswitch
 Version: 2.7.2
-Release: 1%{?snapshot}%{?dist}
+Release: 2%{?snapshot}%{?dist}
 Summary: Open vSwitch daemon/database/utilities
 
 # Nearly all of openvswitch is ASL 2.0.  The bugtool is LGPLv2+, and the
@@ -650,6 +650,9 @@ rm -rf $RPM_BUILD_ROOT
 %{_unitdir}/ovn-controller-vtep.service
 
 %changelog
+* Thu Jul 27 2017 Fedora Release Engineering <releng@fedoraproject.org> - 2.7.2-2
+- Rebuilt for https://fedoraproject.org/wiki/Fedora_27_Mass_Rebuild
+
 * Wed Jul 19 2017 Timothy Redaelli <tredaelli@redhat.com> - 2.7.2-1
 - Update to Open vSwitch 2.7.2
 - Add a symlink of the OCF script in the OCF resources folder
