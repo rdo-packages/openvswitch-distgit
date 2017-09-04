@@ -21,16 +21,19 @@
 %bcond_with check
 %endif
 
+# option to build with libcap-ng, needed for running OVS as regular user
+%bcond_without libcapng
+
 # Enable PIE, bz#955181
 %global _hardened_build 1
 
-%define dpdkver 16.11.2
+%define dpdkver 17.05.1
 %define dpdkdir dpdk-stable
 %define dpdksver %(echo %{dpdkver} | cut -d. -f-2)
 
 Name: openvswitch
-Version: 2.7.2
-Release: 3%{?snapshot}%{?dist}
+Version: 2.8.0
+Release: 1%{?snapshot}%{?dist}
 Summary: Open vSwitch daemon/database/utilities
 
 # Nearly all of openvswitch is ASL 2.0.  The bugtool is LGPLv2+, and the
@@ -74,6 +77,7 @@ Source2: ovs-snapshot.sh
 %endif
 ExcludeArch: ppc
 
+BuildRequires: python-sphinx
 BuildRequires: autoconf automake libtool
 BuildRequires: systemd-units openssl openssl-devel
 BuildRequires: python2-devel python2-six
@@ -92,10 +96,19 @@ BuildRequires: libpcap-devel numactl-devel
 %endif
 %endif
 
+%if %{with libcapng}
+BuildRequires: libcap-ng libcap-ng-devel
+%endif
+
 Requires: openssl iproute module-init-tools
 #Upstream kernel commit 4f647e0a3c37b8d5086214128614a136064110c3
 #Requires: kernel >= 3.15.0-0
 
+Requires(post): /usr/bin/getent
+Requires(post): /usr/sbin/useradd
+Requires(post): /usr/bin/sed
+Requires(post): /usr/sbin/usermod
+Requires(post): /usr/sbin/groupadd
 Requires(post): systemd-units
 Requires(preun): systemd-units
 Requires(postun): systemd-units
@@ -304,6 +317,11 @@ sed -i.old -e "s/^AC_INIT(openvswitch,.*,/AC_INIT(openvswitch, %{version},/" con
 %endif
 
 %configure \
+%if %{with libcapng}
+        --enable-libcapng \
+%else
+        --disable-libcapng \
+%endif
   --enable-ssl \
 %if %{with dpdk}
 %ifarch %{dpdkarches}
@@ -311,14 +329,22 @@ sed -i.old -e "s/^AC_INIT(openvswitch,.*,/AC_INIT(openvswitch, %{version},/" con
 %endif
 %endif
   --with-pkidir=%{_sharedstatedir}/openvswitch/pki
-
+/usr/bin/perl build-aux/dpdkstrip.pl \
+        --dpdk \
+        < rhel/usr_lib_systemd_system_ovs-vswitchd.service.in \
+        > rhel/usr_lib_systemd_system_ovs-vswitchd.service
 make %{?_smp_mflags}
 
 %install
 rm -rf $RPM_BUILD_ROOT
 make install DESTDIR=$RPM_BUILD_ROOT
 
+install -d -m 0755 $RPM_BUILD_ROOT%{_rundir}/openvswitch
+install -d -m 0750 $RPM_BUILD_ROOT%{_localstatedir}/log/openvswitch
 install -d -m 0755 $RPM_BUILD_ROOT%{_sysconfdir}/openvswitch
+
+install -p -D -m 0644 rhel/usr_lib_udev_rules.d_91-vfio.rules \
+        $RPM_BUILD_ROOT%{_udevrulesdir}/91-vfio.rules
 
 install -p -D -m 0644 \
         rhel/usr_share_openvswitch_scripts_systemd_sysconfig.template \
@@ -332,6 +358,9 @@ done
 
 install -m 0755 rhel/etc_init.d_openvswitch \
         $RPM_BUILD_ROOT%{_datadir}/openvswitch/scripts/openvswitch.init
+
+install -p -D -m 0644 rhel/etc_openvswitch_default.conf \
+        $RPM_BUILD_ROOT/%{_sysconfdir}/openvswitch/default.conf
 
 install -p -D -m 0644 rhel/etc_logrotate.d_openvswitch \
         $RPM_BUILD_ROOT/%{_sysconfdir}/logrotate.d/openvswitch
@@ -434,6 +463,23 @@ rm -rf $RPM_BUILD_ROOT
 %endif
 
 %post
+if [ $1 -eq 1 ]; then
+    getent passwd openvswitch >/dev/null || \
+        useradd -r -d / -s /sbin/nologin -c "Open vSwitch Daemons" openvswitch
+
+    sed -i 's:^#OVS_USER_ID=:OVS_USER_ID=:' /etc/sysconfig/openvswitch
+
+    getent group hugetlbfs >/dev/null || \
+        groupadd hugetlbfs
+    usermod -a -G hugetlbfs openvswitch
+    sed -i \
+        's@OVS_USER_ID="openvswitch:openvswitch"@OVS_USER_ID="openvswitch:hugetlbfs"@'\
+        /etc/sysconfig/openvswitch
+
+    # In the case of upgrade, this is not needed.
+    chown -R openvswitch:openvswitch /etc/openvswitch
+fi
+
 %if 0%{?systemd_post:1}
     %systemd_post %{name}.service
 %else
@@ -553,6 +599,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_sysconfdir}/bash_completion.d/ovs-appctl-bashcomp.bash
 %{_sysconfdir}/bash_completion.d/ovs-vsctl-bashcomp.bash
 %dir %{_sysconfdir}/openvswitch
+%{_sysconfdir}/openvswitch/default.conf
 %config %ghost %{_sysconfdir}/openvswitch/conf.db
 %config %ghost %{_sysconfdir}/openvswitch/system-id.conf
 %config(noreplace) %{_sysconfdir}/sysconfig/openvswitch
@@ -603,6 +650,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/man8/ovs-vswitchd.8*
 %{_mandir}/man8/ovs-parse-backtrace.8*
 %{_mandir}/man8/ovs-testcontroller.8*
+%{_udevrulesdir}/91-vfio.rules
 %doc COPYING NOTICE README.rst NEWS rhel/README.RHEL.rst
 /var/lib/openvswitch
 /var/log/openvswitch
@@ -613,6 +661,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_bindir}/ovn-docker-underlay-driver
 
 %files ovn-common
+%{_bindir}/ovn-detrace
 %{_bindir}/ovn-nbctl
 %{_bindir}/ovn-sbctl
 %{_bindir}/ovn-trace
@@ -621,6 +670,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_datadir}/openvswitch/scripts/ovn-bugtool-nbctl-show
 %{_datadir}/openvswitch/scripts/ovn-bugtool-sbctl-lflow-list
 %{_datadir}/openvswitch/scripts/ovn-bugtool-sbctl-show
+%{_mandir}/man1/ovn-detrace.1*
 %{_mandir}/man8/ovn-ctl.8*
 %{_mandir}/man8/ovn-nbctl.8*
 %{_mandir}/man8/ovn-trace.8*
@@ -650,6 +700,9 @@ rm -rf $RPM_BUILD_ROOT
 %{_unitdir}/ovn-controller-vtep.service
 
 %changelog
+* Mon Sep 04 2017 Timothy Redaelli <tredaelli@redhat.com> - 2.8.0-1
+- Update to Open vSwitch 2.8.0 and DPDK 17.05.1 (#1487971)
+
 * Thu Aug 03 2017 Fedora Release Engineering <releng@fedoraproject.org> - 2.7.2-3
 - Rebuilt for https://fedoraproject.org/wiki/Fedora_27_Binutils_Mass_Rebuild
 
