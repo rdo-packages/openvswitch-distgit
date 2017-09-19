@@ -27,13 +27,13 @@
 # Enable PIE, bz#955181
 %global _hardened_build 1
 
-%define dpdkver 17.05.1
+%define dpdkver 17.05.2
 %define dpdkdir dpdk-stable
 %define dpdksver %(echo %{dpdkver} | cut -d. -f-2)
 
 Name: openvswitch
 Version: 2.8.0
-Release: 1%{?snapshot}%{?dist}
+Release: 2%{?snapshot}%{?dist}
 Summary: Open vSwitch daemon/database/utilities
 
 # Nearly all of openvswitch is ASL 2.0.  The bugtool is LGPLv2+, and the
@@ -700,6 +700,9 @@ fi
 %{_unitdir}/ovn-controller-vtep.service
 
 %changelog
+* Tue Sep 19 2017 Timothy Redaelli <tredaelli@redhat.com> - 2.8.0-2
+- Update DPDK to 17.05.2 (bugfixes)
+
 * Mon Sep 04 2017 Timothy Redaelli <tredaelli@redhat.com> - 2.8.0-1
 - Update to Open vSwitch 2.8.0 and DPDK 17.05.1 (#1487971)
 
