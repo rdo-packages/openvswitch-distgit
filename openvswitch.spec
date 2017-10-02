@@ -32,8 +32,8 @@
 %define dpdksver %(echo %{dpdkver} | cut -d. -f-2)
 
 Name: openvswitch
-Version: 2.8.0
-Release: 2%{?snapshot}%{?dist}
+Version: 2.8.1
+Release: 1%{?snapshot}%{?dist}
 Summary: Open vSwitch daemon/database/utilities
 
 # Nearly all of openvswitch is ASL 2.0.  The bugtool is LGPLv2+, and the
@@ -700,6 +700,9 @@ fi
 %{_unitdir}/ovn-controller-vtep.service
 
 %changelog
+* Mon Oct 02 2017 Timothy Redaelli <tredaelli@redhat.com> - 2.8.1-1
+- Update to Open vSwitch 2.8.1
+
 * Tue Sep 19 2017 Timothy Redaelli <tredaelli@redhat.com> - 2.8.0-2
 - Update DPDK to 17.05.2 (bugfixes)
 
