@@ -33,7 +33,7 @@
 
 Name: openvswitch
 Version: 2.8.1
-Release: 2%{?snapshot}%{?dist}
+Release: 3%{?snapshot}%{?dist}
 Summary: Open vSwitch daemon/database/utilities
 
 # Nearly all of openvswitch is ASL 2.0.  The bugtool is LGPLv2+, and the
@@ -595,15 +595,16 @@ fi
 %{_includedir}/ovn/*
 
 %files
-%defattr(-,root,root)
-%{_sysconfdir}/bash_completion.d/ovs-appctl-bashcomp.bash
-%{_sysconfdir}/bash_completion.d/ovs-vsctl-bashcomp.bash
+%defattr(-,openvswitch,openvswitch)
 %dir %{_sysconfdir}/openvswitch
 %{_sysconfdir}/openvswitch/default.conf
 %config %ghost %{_sysconfdir}/openvswitch/conf.db
 %config %ghost %{_sysconfdir}/openvswitch/system-id.conf
 %config(noreplace) %{_sysconfdir}/sysconfig/openvswitch
 %config(noreplace) %{_sysconfdir}/logrotate.d/openvswitch
+%defattr(-,root,root)
+%{_sysconfdir}/bash_completion.d/ovs-appctl-bashcomp.bash
+%{_sysconfdir}/bash_completion.d/ovs-vsctl-bashcomp.bash
 %{_unitdir}/openvswitch.service
 %{_unitdir}/ovs-vswitchd.service
 %{_unitdir}/ovsdb-server.service
@@ -653,7 +654,7 @@ fi
 %{_udevrulesdir}/91-vfio.rules
 %doc COPYING NOTICE README.rst NEWS rhel/README.RHEL.rst
 /var/lib/openvswitch
-/var/log/openvswitch
+%attr(755,-,-) /var/log/openvswitch
 %ghost %attr(755,root,root) %{_rundir}/openvswitch
 
 %files ovn-docker
@@ -700,6 +701,9 @@ fi
 %{_unitdir}/ovn-controller-vtep.service
 
 %changelog
+* Fri Feb 09 2018 Aaron Conole <aconole@redhat.com> - 2.8.1-2
+- Update to include 94cd8383e297 and 951d79e638ec from upstream
+
 * Thu Feb 08 2018 Fedora Release Engineering <releng@fedoraproject.org> - 2.8.1-2
 - Rebuilt for https://fedoraproject.org/wiki/Fedora_28_Mass_Rebuild
 
