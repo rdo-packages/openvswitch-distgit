@@ -77,6 +77,7 @@ Source2: ovs-snapshot.sh
 %endif
 ExcludeArch: ppc
 
+BuildRequires: gcc
 BuildRequires: python-sphinx
 BuildRequires: autoconf automake libtool
 BuildRequires: systemd-units openssl openssl-devel
