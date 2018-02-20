@@ -9,46 +9,57 @@
 # option. For example:
 # rpmbuild -bb --with check openvswitch.spec
 
+# Enable PIE, bz#955181
+%global _hardened_build 1
+
+# RHEL-7 doesn't define _rundir macro yet
+# Fedora 15 onwards uses /run as _rundir
+%if 0%{!?_rundir:1}
+%define _rundir /run
+%endif
 
 # To disable DPDK support, specify '--without dpdk' when building
 %bcond_without dpdk
 
 # test-suite is broken for big endians
 # https://bugzilla.redhat.com/show_bug.cgi?id=1105458#c10
-# "ofproto-dpif - select group with dp_hash selection method" test is broken on arm
-%ifnarch ppc ppc64 ppc64p7 s390 s390x armv7hl
+# "ofproto-dpif - select group with dp_hash selection method" test is broken on armv7lh
+%ifarch x86_64 aarch64 ppc64le
 %bcond_without check
 %else
 %bcond_with check
 %endif
-
+# option to run kernel datapath tests, requires building as root!
+%bcond_with check_datapath_kernel
 # option to build with libcap-ng, needed for running OVS as regular user
 %bcond_without libcapng
-
-# Enable PIE, bz#955181
-%global _hardened_build 1
-
-%define dpdkver 17.11
-%define dpdkdir dpdk
-%define dpdksver %(echo %{dpdkver} | cut -d. -f-2)
+# option to build openvswitch-ovn-docker package
+%bcond_with ovn_docker
 
 Name: openvswitch
+Summary: Open vSwitch
+Group: System Environment/Daemons daemon/database/utilities
+URL: http://www.openvswitch.org/
 Version: 2.9.0
 Release: 1%{?commit0:.%{date}git%{shortcommit0}}%{?dist}
-Summary: Open vSwitch daemon/database/utilities
 
 # Nearly all of openvswitch is ASL 2.0.  The bugtool is LGPLv2+, and the
 # lib/sflow*.[ch] files are SISSL
 # datapath/ is GPLv2 (although not built into any of the binary packages)
 License: ASL 2.0 and LGPLv2+ and SISSL
-URL: http://openvswitch.org
+
+%define dpdkver 17.11
+%define dpdkdir dpdk
+%define dpdksver %(echo %{dpdkver} | cut -d. -f-2)
+# NOTE: DPDK does not currently build for s390x
+%define dpdkarches x86_64 aarch64 ppc64le
 
 %if 0%{?commit0:1}
 Source: https://github.com/openvswitch/ovs/archive/%{commit0}.tar.gz#/%{name}-%{shortcommit0}.tar.gz
 %else
 Source: http://openvswitch.org/releases/%{name}-%{version}.tar.gz
 %endif
-Source10: http://fast.dpdk.org/rel/dpdk-%{dpdkver}.tar.gz
+Source10: http://fast.dpdk.org/rel/dpdk-%{dpdkver}.tar.xz
 
 Source500: configlib.sh
 Source501: gen_config_group.sh
@@ -60,11 +71,38 @@ Source504: arm64-armv8a-linuxapp-gcc-config
 Source505: ppc_64-power8-linuxapp-gcc-config
 Source506: x86_64-native-linuxapp-gcc-config
 
+# The DPDK is designed to optimize througput of network traffic using, among
+# other techniques, carefully crafted assembly instructions.  As such it
+# needs extensive work to port it to other architectures.
+ExclusiveArch: x86_64 aarch64 ppc64le s390x
+
+# dpdk_mach_arch maps between rpm and dpdk arch name, often same as _target_cpu
+# dpdk_mach_tmpl is the config template dpdk_mach name, often "native"
+# dpdk_mach is the actual dpdk_mach name used in the dpdk make system
+%ifarch x86_64
+%define dpdk_mach_arch x86_64
+%define dpdk_mach_tmpl native
+%define dpdk_mach default
+%endif
+%ifarch aarch64
+%define dpdk_mach_arch arm64
+%define dpdk_mach_tmpl armv8a
+%define dpdk_mach armv8a
+%endif
+%ifarch ppc64le
+%define dpdk_mach_arch ppc_64
+%define dpdk_mach_tmpl power8
+%define dpdk_mach power8
+%endif
+
+%define dpdktarget %{dpdk_mach_arch}-%{dpdk_mach_tmpl}-linuxapp-gcc
+
 # ovs-patches
 
 # OVS (including OVN) backports (0 - 300)
 
 Patch10: 0001-ofproto-dpif-Delete-system-tunnel-interface-when-rem.patch
+
 
 # DPDK backports (400-500)
 Patch400: 0001-vhost_user_protect_active_rings_from_async_ring_changes.patch
@@ -79,54 +117,40 @@ Patch423: 0004-vhost-destroy-unused-virtqueues-when-multiqueue-not-.patch
 Patch424: 0005-vhost-add-flag-for-built-in-virtio-driver.patch
 Patch425: 0006-vhost-drop-virtqueues-only-with-built-in-virtio-driv.patch
 
-%if %{with dpdk}
-%define dpdkarches x86_64 aarch64 ppc64le
-
-# machine_arch maps between rpm and dpdk arch name, often same as _target_cpu
-# machine_tmpl is the config template machine name, often "native"
-# machine is the actual machine name used in the dpdk make system
-%ifarch x86_64
-%define machine_arch x86_64
-%define machine_tmpl native
-%define machine default
-%endif
-%ifarch aarch64
-%define machine_arch arm64
-%define machine_tmpl armv8a
-%define machine armv8a
-%endif
-%ifarch ppc64le
-%define machine_arch ppc_64
-%define machine_tmpl power8
-%define machine power8
-%endif
-
-%define dpdktarget %{machine_arch}-%{machine_tmpl}-linuxapp-gcc
-%endif
-ExcludeArch: ppc
 
 BuildRequires: gcc
-BuildRequires: python-sphinx
+BuildRequires: python2-sphinx
 BuildRequires: autoconf automake libtool
 BuildRequires: systemd-units openssl openssl-devel
 BuildRequires: python2-devel python2-six
 BuildRequires: python3-devel python3-six
 BuildRequires: desktop-file-utils
-BuildRequires: groff graphviz
+BuildRequires: groff-base graphviz
 # make check dependencies
-%if %{with check}
-BuildRequires: python2-twisted python2-zope-interface
 BuildRequires: procps-ng
-%endif
-%if %{with dpdk}
-%ifarch %{dpdkarches}
-# DPDK driver dependencies
-BuildRequires: libpcap-devel numactl-devel
-%endif
+BuildRequires: pyOpenSSL
+%if %{with check_datapath_kernel}
+BuildRequires: nmap-ncat
+# would be useful but not available in RHEL or EPEL
+#BuildRequires: pyftpdlib
 %endif
 
 %if %{with libcapng}
 BuildRequires: libcap-ng libcap-ng-devel
+%endif
+
+%if %{with dpdk}
+%ifarch %{dpdkarches}
+# DPDK driver dependencies
+BuildRequires: zlib-devel libpcap-devel numactl-devel
+
+# Virtual provide for depending on DPDK-enabled OVS
+Provides: openvswitch-dpdk = %{version}-%{release}
+# Migration path for openvswitch-dpdk package
+Obsoletes: openvswitch-dpdk < 2.6.0
+# Required by packaging policy for the bundled DPDK
+Provides: bundled(dpdk) = %{dpdkver}
+%endif
 %endif
 
 Requires: openssl iproute module-init-tools
@@ -228,6 +252,7 @@ Requires: openvswitch
 %description ovn-common
 Utilities that are use to diagnose and manage the OVN components.
 
+%if %{with ovn_docker}
 %package ovn-docker
 Summary: Open vSwitch - Open Virtual Network support
 License: ASL 2.0
@@ -235,6 +260,7 @@ Requires: openvswitch openvswitch-ovn-common python2-openvswitch
 
 %description ovn-docker
 Docker network plugins for OVN.
+%endif
 
 %prep
 %if 0%{?commit0:1}
@@ -244,8 +270,14 @@ Docker network plugins for OVN.
 %endif
 
 %build
+%if 0%{?commit0:1}
+# fix the snapshot unreleased version to be the released one.
+sed -i.old -e "s/^AC_INIT(openvswitch,.*,/AC_INIT(openvswitch, %{version},/" configure.ac
+%endif
+./boot.sh
+
 %if %{with dpdk}
-%ifarch %{dpdkarches}
+%ifarch %{dpdkarches}    # build dpdk
 # Lets build DPDK first
 cd %{dpdkdir}-%{dpdkver}
 
@@ -276,7 +308,7 @@ DPDK drivers included in this package:
 
 EOF
 
-for f in $(ls %{machine_arch}-%{machine_tmpl}-linuxapp-gcc/lib/lib*_pmd_*); do
+for f in $(ls %{dpdk_mach_arch}-%{dpdk_mach_tmpl}-linuxapp-gcc/lib/lib*_pmd_*); do
     basename ${f} | cut -c12- | cut -d. -f1 | tr [:lower:] [:upper:]
 done >> README.DPDK-PMDS
 
@@ -287,15 +319,10 @@ http://dpdk.org/doc/guides-%{dpdksver}/nics/index.html
 EOF
 
 cd -
-%endif
+%endif    # build dpdk
 %endif
 
-%if 0%{?commit0:1}
-# fix the snapshot unreleased version to be the released one.
-sed -i.old -e "s/^AC_INIT(openvswitch,.*,/AC_INIT(openvswitch, %{version},/" configure.ac
-%endif
-./boot.sh
-
+# And now for OVS...
 %configure \
 %if %{with libcapng}
         --enable-libcapng \
@@ -330,11 +357,12 @@ install -p -D -m 0644 rhel/usr_lib_udev_rules.d_91-vfio.rules \
 install -p -D -m 0644 \
         rhel/usr_share_openvswitch_scripts_systemd_sysconfig.template \
         $RPM_BUILD_ROOT/%{_sysconfdir}/sysconfig/openvswitch
+
 for service in openvswitch ovsdb-server ovs-vswitchd ovs-delete-transient-ports \
                 ovn-controller ovn-controller-vtep ovn-northd; do
         install -p -D -m 0644 \
-                rhel/usr_lib_systemd_system_${service}.service \
-                $RPM_BUILD_ROOT%{_unitdir}/${service}.service
+                        rhel/usr_lib_systemd_system_${service}.service \
+                        $RPM_BUILD_ROOT%{_unitdir}/${service}.service
 done
 
 install -m 0755 rhel/etc_init.d_openvswitch \
@@ -375,15 +403,27 @@ install -d -m 0755 $RPM_BUILD_ROOT%{_prefix}/lib/ocf/resource.d/ovn
 ln -s %{_datadir}/openvswitch/scripts/ovndb-servers.ocf \
       $RPM_BUILD_ROOT%{_prefix}/lib/ocf/resource.d/ovn/ovndb-servers
 
+install -p -D -m 0755 \
+        rhel/usr_share_openvswitch_scripts_ovs-systemd-reload \
+        $RPM_BUILD_ROOT%{_datadir}/openvswitch/scripts/ovs-systemd-reload
+
 touch $RPM_BUILD_ROOT%{_sysconfdir}/openvswitch/conf.db
 touch $RPM_BUILD_ROOT%{_sysconfdir}/openvswitch/system-id.conf
 
 # remove unpackaged files
 rm -f $RPM_BUILD_ROOT/%{_bindir}/ovs-benchmark \
+        $RPM_BUILD_ROOT/%{_bindir}/ovs-docker \
         $RPM_BUILD_ROOT/%{_bindir}/ovs-parse-backtrace \
+        $RPM_BUILD_ROOT/%{_bindir}/ovs-testcontroller \
         $RPM_BUILD_ROOT/%{_sbindir}/ovs-vlan-bug-workaround \
         $RPM_BUILD_ROOT/%{_mandir}/man1/ovs-benchmark.1* \
+        $RPM_BUILD_ROOT/%{_mandir}/man8/ovs-testcontroller.* \
         $RPM_BUILD_ROOT/%{_mandir}/man8/ovs-vlan-bug-workaround.8*
+
+%if %{without ovn_docker}
+rm -f $RPM_BUILD_ROOT/%{_bindir}/ovn-docker-overlay-driver \
+        $RPM_BUILD_ROOT/%{_bindir}/ovn-docker-underlay-driver
+%endif
 
 %check
 %if %{with check}
@@ -394,6 +434,16 @@ rm -f $RPM_BUILD_ROOT/%{_bindir}/ovs-benchmark \
         exit 1
     fi
 %endif
+%if %{with check_datapath_kernel}
+    if make check-kernel RECHECK=yes; then :;
+    else
+        cat tests/system-kmod-testsuite.log
+        exit 1
+    fi
+%endif
+
+%clean
+rm -rf $RPM_BUILD_ROOT
 
 %preun
 %if 0%{?systemd_preun:1}
@@ -529,14 +579,10 @@ fi
 %endif
 
 %postun
-%if 0%{?systemd_postun_with_restart:1}
-    %systemd_postun_with_restart %{name}.service
+%if 0%{?systemd_postun:1}
+    %systemd_postun %{name}.service
 %else
     /bin/systemctl daemon-reload >/dev/null 2>&1 || :
-    if [ "$1" -ge "1" ] ; then
-    # Package upgrade, not uninstall
-        /bin/systemctl try-restart %{name}.service >/dev/null 2>&1 || :
-    fi
 %endif
 
 
@@ -578,13 +624,13 @@ fi
 %config %ghost %{_sysconfdir}/openvswitch/conf.db
 %config %ghost %{_sysconfdir}/openvswitch/system-id.conf
 %config(noreplace) %{_sysconfdir}/sysconfig/openvswitch
-%config(noreplace) %{_sysconfdir}/logrotate.d/openvswitch
 %defattr(-,root,root)
 %{_sysconfdir}/bash_completion.d/ovs-appctl-bashcomp.bash
 %{_sysconfdir}/bash_completion.d/ovs-vsctl-bashcomp.bash
+%config(noreplace) %{_sysconfdir}/logrotate.d/openvswitch
 %{_unitdir}/openvswitch.service
-%{_unitdir}/ovs-vswitchd.service
 %{_unitdir}/ovsdb-server.service
+%{_unitdir}/ovs-vswitchd.service
 %{_unitdir}/ovs-delete-transient-ports.service
 %{_datadir}/openvswitch/scripts/openvswitch.init
 %{_sysconfdir}/sysconfig/network-scripts/ifup-ovs
@@ -596,17 +642,16 @@ fi
 %{_datadir}/openvswitch/scripts/ovs-save
 %{_datadir}/openvswitch/scripts/ovs-vtep
 %{_datadir}/openvswitch/scripts/ovs-ctl
+%{_datadir}/openvswitch/scripts/ovs-systemd-reload
 %config %{_datadir}/openvswitch/vswitch.ovsschema
 %config %{_datadir}/openvswitch/vtep.ovsschema
 %{_bindir}/ovs-appctl
-%{_bindir}/ovs-docker
 %{_bindir}/ovs-dpctl
 %{_bindir}/ovs-dpctl-top
 %{_bindir}/ovs-ofctl
 %{_bindir}/ovs-vsctl
 %{_bindir}/ovsdb-client
 %{_bindir}/ovsdb-tool
-%{_bindir}/ovs-testcontroller
 %{_bindir}/ovs-pki
 %{_bindir}/vtep-ctl
 %{_sbindir}/ovs-bugtool
@@ -632,16 +677,22 @@ fi
 %{_mandir}/man8/ovs-vsctl.8*
 %{_mandir}/man8/ovs-vswitchd.8*
 %{_mandir}/man8/ovs-parse-backtrace.8*
-%{_mandir}/man8/ovs-testcontroller.8*
 %{_udevrulesdir}/91-vfio.rules
 %doc COPYING NOTICE README.rst NEWS rhel/README.RHEL.rst
+%if %{with dpdk}
+%ifarch %{dpdkarches}
+%doc dpdk-%{dpdkver}/README.DPDK-PMDS
+%endif
+%endif
 /var/lib/openvswitch
 %attr(755,-,-) /var/log/openvswitch
 %ghost %attr(755,root,root) %{_rundir}/openvswitch
 
+%if %{with ovn_docker}
 %files ovn-docker
 %{_bindir}/ovn-docker-overlay-driver
 %{_bindir}/ovn-docker-underlay-driver
+%endif
 
 %files ovn-common
 %{_bindir}/ovn-detrace
