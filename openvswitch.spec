@@ -287,7 +287,7 @@ unset RTE_SDK RTE_INCLUDE RTE_TARGET
 # Avoid appending second -Wall to everything, it breaks upstream warning
 # disablers in makefiles. Strip explicit -march= from optflags since they
 # will only guarantee build failures, DPDK is picky with that.
-export EXTRA_CFLAGS="$(echo %{optflags} | sed -e 's:-Wall::g' -e 's:-march=[[:alnum:]]* ::g') -Wformat"
+export EXTRA_CFLAGS="$(echo %{optflags} | sed -e 's:-Wall::g' -e 's:-march=[[:alnum:]]* ::g') -Wformat -fPIC"
 
 # DPDK defaults to using builder-specific compiler flags.  However,
 # the config has been changed by specifying CONFIG_RTE_MACHINE=default
@@ -619,11 +619,11 @@ fi
 
 %files
 %defattr(-,openvswitch,openvswitch)
-%dir %{_sysconfdir}/openvswitch
-%{_sysconfdir}/openvswitch/default.conf
-%config %ghost %{_sysconfdir}/openvswitch/conf.db
-%config %ghost %{_sysconfdir}/openvswitch/system-id.conf
-%config(noreplace) %{_sysconfdir}/sysconfig/openvswitch
+%verify(not owner group) %dir %{_sysconfdir}/openvswitch
+%verify(not owner group) %{_sysconfdir}/openvswitch/default.conf
+%config %ghost %verify(not owner group md5 size mtime) %{_sysconfdir}/openvswitch/conf.db
+%config %ghost %verify(not owner group md5 size mtime) %{_sysconfdir}/openvswitch/system-id.conf
+%config(noreplace) %verify(not owner group md5 size mtime) %{_sysconfdir}/sysconfig/openvswitch
 %defattr(-,root,root)
 %{_sysconfdir}/bash_completion.d/ovs-appctl-bashcomp.bash
 %{_sysconfdir}/bash_completion.d/ovs-vsctl-bashcomp.bash
