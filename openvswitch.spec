@@ -41,7 +41,7 @@ Summary: Open vSwitch
 Group: System Environment/Daemons daemon/database/utilities
 URL: http://www.openvswitch.org/
 Version: 2.9.0
-Release: 1%{?commit0:.%{date}git%{shortcommit0}}%{?dist}
+Release: 2%{?commit0:.%{date}git%{shortcommit0}}%{?dist}
 
 # Nearly all of openvswitch is ASL 2.0.  The bugtool is LGPLv2+, and the
 # lib/sflow*.[ch] files are SISSL
@@ -734,6 +734,9 @@ fi
 %{_unitdir}/ovn-controller-vtep.service
 
 %changelog
+* Tue Feb 20 2018 Timothy Redaelli <tredaelli@redhat.com> - 2.9.0-2
+- Align totally with RHEL "Fast Datapath" channel 2.9.0-1
+
 * Tue Feb 20 2018 Timothy Redaelli <tredaelli@redhat.com> - 2.9.0-1
 - Update to Open vSwitch 2.9.0 and DPDK 17.11
 - Align with RHEL "Fast Datapath" channel 2.9.0-1
