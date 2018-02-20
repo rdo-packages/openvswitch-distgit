@@ -1,0 +1,40 @@
+From d7f0078e3a3d838b4ec6a87dca62771246e53db6 Mon Sep 17 00:00:00 2001
+From: Maxime Coquelin <maxime.coquelin@redhat.com>
+Date: Wed, 13 Dec 2017 09:51:07 +0100
+Subject: [PATCH 2/6] vhost: propagate set features handling error
+
+Not propagating VHOST_USER_SET_FEATURES request handling
+error may result in unpredictable behavior, as host and
+guests features may no more be synchronized.
+
+This patch fixes this by reporting the error to the upper
+layer, which would result in the device being destroyed
+and the connection with the master to be closed.
+
+Signed-off-by: Maxime Coquelin <maxime.coquelin@redhat.com>
+Acked-by: Laszlo Ersek <lersek@redhat.com>
+Acked-by: Yuanhan Liu <yliu@fridaylinux.org>
+(cherry picked from commit 59fe5e17d9308b008ffa22ea250ddd363c84c3b5)
+Signed-off-by: Maxime Coquelin <maxime.coquelin@redhat.com>
+---
+ dpdk-17.11/lib/librte_vhost/vhost_user.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/dpdk-17.11/lib/librte_vhost/vhost_user.c b/dpdk-17.11/lib/librte_vhost/vhost_user.c
+index 545dbcb2b..471b1612c 100644
+--- a/dpdk-17.11/lib/librte_vhost/vhost_user.c
++++ b/dpdk-17.11/lib/librte_vhost/vhost_user.c
+@@ -1263,7 +1263,9 @@ vhost_user_msg_handler(int vid, int fd)
+ 		send_vhost_reply(fd, &msg);
+ 		break;
+ 	case VHOST_USER_SET_FEATURES:
+-		vhost_user_set_features(dev, msg.payload.u64);
++		ret = vhost_user_set_features(dev, msg.payload.u64);
++		if (ret)
++			return -1;
+ 		break;
+ 
+ 	case VHOST_USER_GET_PROTOCOL_FEATURES:
+-- 
+2.14.3
+

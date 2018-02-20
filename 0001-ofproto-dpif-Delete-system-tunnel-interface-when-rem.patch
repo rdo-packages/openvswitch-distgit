@@ -1,0 +1,50 @@
+From f6193c08c47bfb4bc2b10114bcdea7ae6581b144 Mon Sep 17 00:00:00 2001
+From: "juyan@redhat.com" <juyan@redhat.com>
+Date: Wed, 25 Oct 2017 11:41:27 +0800
+Subject: [PATCH] ofproto-dpif: Delete system tunnel interface when remove ovs
+ bridge
+
+When a user adds the first tunnel of a given type (e.g. the first VXLAN
+tunnel) to an OVS bridge, OVS adds a vport of the same type to the
+kernel datapath that backs the bridge.  There is the corresponding
+expectation that, when the last tunnel of that type is removed from the
+OVS bridges, OVS would remove the vport that represents it from the
+backing kernel datapath, but OVS was not doing that.  This commit fixes
+the problem.
+
+There is not any major concern about the lingering tunnel interface, but
+it's cleaner to delete it.
+
+Fixes: 921c370a9df5 ("dpif-netlink: Probe for out-of-tree tunnels, decides used interface")
+Signed-off-by: JunhanYan <juyan@redhat.com>
+Signed-off-by: Ben Pfaff <blp@ovn.org>
+---
+ ofproto/ofproto-dpif.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/ofproto/ofproto-dpif.c b/ofproto/ofproto-dpif.c
+index 3365d4185..1a648c33f 100644
+--- a/ofproto/ofproto-dpif.c
++++ b/ofproto/ofproto-dpif.c
+@@ -661,6 +661,8 @@ dealloc(struct ofproto *ofproto_)
+ static void
+ close_dpif_backer(struct dpif_backer *backer, bool del)
+ {
++    struct simap_node *node;
++
+     ovs_assert(backer->refcount > 0);
+ 
+     if (--backer->refcount) {
+@@ -669,6 +671,9 @@ close_dpif_backer(struct dpif_backer *backer, bool del)
+ 
+     udpif_destroy(backer->udpif);
+ 
++    SIMAP_FOR_EACH (node, &backer->tnl_backers) {
++        dpif_port_del(backer->dpif, u32_to_odp(node->data), false);
++    }
+     simap_destroy(&backer->tnl_backers);
+     ovs_rwlock_destroy(&backer->odp_to_ofport_lock);
+     hmap_destroy(&backer->odp_to_ofport_map);
+-- 
+2.14.3
+

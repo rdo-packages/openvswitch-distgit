@@ -1,0 +1,86 @@
+The RH DPDK Configuration System
+================================
+
+Overview
+--------
+
+As we're aware, the DPDK configuration is an important thing to manage
+well.  We have a number of concerns that must be addressed in any
+configuration management system.
+
+1. We want to make sure that we have 'conscious' configurations made up
+   for each platform, and for each DPDK-enabled package
+2. We want to make sure that when DPDK project adds a new configuration,
+   we make a conscious decision about whether we enable that
+   configuration.
+3. We need to make sure that we can accommodate the wacky new
+   configuration management system coming down the pipe for
+   DPDK (meson+ninja).
+
+
+Procedure (High level)
+----------------------
+
+Taking some inspiration from the kernel config DPDK packages will use
+the following procedure:
+
+1. We generate the DPDK configuration from source (as we do today with
+   'make T=TEMPLATE config').  This creates a base configuration file.
+   In this case TEMPLATE is the combination of $arch and $release that
+   can vary for the package.
+2. We generate a sha256 sum from that file (based on a rules engine
+   described later).
+3. We take a hand-built checked-in configuration (dpdk.TEMPLATE.config)
+   which has a special tag inside containing the required base sha256
+   sum and compare with the generated sha256 sum.
+4. If the comparison succeeds, we overwrite the generated config with
+   the hand-built config.  Proceed building as normal.
+5. If the comparison fails, we halt the build.  Clearly a new
+   configuration was introduced which was not considered and needs to be
+   addressed.
+
+It's important to note that if the default configuration changes, that
+will also cause the shasum to change.  Even if the default for a
+parameter that we override changes, this will trip up this simplistic
+version.
+
+
+SHA Sum
+-------
+
+To generate the sha256 sum:
+* remove all 'comment' and empty lines
+* sort the remaining lines
+* calculate the sha sum
+
+This is expressed in bash as a one-liner:
+
+    egrep -v ^"$cmnt" $1 | egrep -v ^$ | sort -u | sha256sum | cut -d" " -f1
+
+The new DPDK configuration will be generating into a header file
+(rte_config.h), and so some 'forward' consideration was given to making
+the comment line as configurable (instead of using straight '#') - hence the
+'$cmnt' variable.
+
+The SHA sum will be identified in the 'new' header by the standard ascii
+tag format:
+
+# -*- cfg-sha: [a-z0-9]+
+
+Or in the case of a .c file:
+/* -*- cfg-sha: [a-z0-9]+ */
+
+
+Helper scripts
+--------------
+
+Included are a set of scripts for DPDK configuration, which replaces
+the original setconf functions in the old spec file.
+
+* set_config.sh - A script which copies the new DPDK configuration over the
+                  old one.  This validates the sha sum.
+* gen_config_group.sh - A script which reads the .spec file for all of the
+                        architectures and generates starting configurations.
+                        Use this script to get a baseline configuration for
+                        modifying.
+* configlib.sh - A library for generating and reading SHA sums.

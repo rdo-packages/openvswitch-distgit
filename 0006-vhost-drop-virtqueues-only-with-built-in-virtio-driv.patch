@@ -1,0 +1,42 @@
+From c18b2f65e0a3be55e30fc3df6062e00353dfdb26 Mon Sep 17 00:00:00 2001
+From: Stefan Hajnoczi <stefanha@redhat.com>
+Date: Wed, 31 Jan 2018 17:46:51 +0000
+Subject: [PATCH 6/6] vhost: drop virtqueues only with built-in virtio driver
+
+Commit e29109323595beb3884da58126ebb3b878cb66f5 ("vhost: destroy unused
+virtqueues when multiqueue not negotiated") broke vhost-scsi by removing
+virtqueues when the virtio-net-specific VIRTIO_NET_F_MQ feature bit is
+missing.
+
+The vhost_user.c code shouldn't assume all devices are vhost net device
+backends.  Use the new VIRTIO_DEV_BUILTIN_VIRTIO_NET flag to check
+whether virtio_net.c is being used.
+
+This fixes examples/vhost_scsi.
+
+Signed-off-by: Stefan Hajnoczi <stefanha@redhat.com>
+Reviewed-by: Maxime Coquelin <maxime.coquelin@redhat.com>
+Acked-by: Yuanhan Liu <yliu@fridaylinux.org>
+(cherry picked from commit 33adfbc805651f455dbf19f1e4b4b0878717a5e5)
+Signed-off-by: Maxime Coquelin <maxime.coquelin@redhat.com>
+---
+ dpdk-17.11/lib/librte_vhost/vhost_user.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/dpdk-17.11/lib/librte_vhost/vhost_user.c b/dpdk-17.11/lib/librte_vhost/vhost_user.c
+index 1848c8de9..f334497d4 100644
+--- a/dpdk-17.11/lib/librte_vhost/vhost_user.c
++++ b/dpdk-17.11/lib/librte_vhost/vhost_user.c
+@@ -216,7 +216,8 @@ vhost_user_set_features(struct virtio_net *dev, uint64_t features)
+ 		(dev->features & (1 << VIRTIO_NET_F_MRG_RXBUF)) ? "on" : "off",
+ 		(dev->features & (1ULL << VIRTIO_F_VERSION_1)) ? "on" : "off");
+ 
+-	if (!(dev->features & (1ULL << VIRTIO_NET_F_MQ))) {
++	if ((dev->flags & VIRTIO_DEV_BUILTIN_VIRTIO_NET) &&
++	    !(dev->features & (1ULL << VIRTIO_NET_F_MQ))) {
+ 		/*
+ 		 * Remove all but first queue pair if MQ hasn't been
+ 		 * negotiated. This is safe because the device is not
+-- 
+2.14.3
+

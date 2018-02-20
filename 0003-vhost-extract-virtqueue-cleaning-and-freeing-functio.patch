@@ -1,0 +1,83 @@
+From 297fcc013877e57c387e444bf7323fbfd77e4b3f Mon Sep 17 00:00:00 2001
+From: Maxime Coquelin <maxime.coquelin@redhat.com>
+Date: Wed, 13 Dec 2017 09:51:08 +0100
+Subject: [PATCH 3/6] vhost: extract virtqueue cleaning and freeing functions
+
+This patch extracts needed code for vhost_user.c to be able
+to clean and free virtqueues unitary.
+
+Signed-off-by: Maxime Coquelin <maxime.coquelin@redhat.com>
+Acked-by: Laszlo Ersek <lersek@redhat.com>
+Acked-by: Yuanhan Liu <yliu@fridaylinux.org>
+(cherry picked from commit 467fe22df94b85d2df67b9be3ccbfb3dd72cdd6d)
+Signed-off-by: Maxime Coquelin <maxime.coquelin@redhat.com>
+---
+ dpdk-17.11/lib/librte_vhost/vhost.c | 22 ++++++++++++----------
+ dpdk-17.11/lib/librte_vhost/vhost.h |  3 +++
+ 2 files changed, 15 insertions(+), 10 deletions(-)
+
+diff --git a/dpdk-17.11/lib/librte_vhost/vhost.c b/dpdk-17.11/lib/librte_vhost/vhost.c
+index 4f8b73a09..df528a4ea 100644
+--- a/dpdk-17.11/lib/librte_vhost/vhost.c
++++ b/dpdk-17.11/lib/librte_vhost/vhost.c
+@@ -103,7 +103,7 @@ get_device(int vid)
+ 	return dev;
+ }
+ 
+-static void
++void
+ cleanup_vq(struct vhost_virtqueue *vq, int destroy)
+ {
+ 	if ((vq->callfd >= 0) && (destroy != 0))
+@@ -127,6 +127,15 @@ cleanup_device(struct virtio_net *dev, int destroy)
+ 		cleanup_vq(dev->virtqueue[i], destroy);
+ }
+ 
++void
++free_vq(struct vhost_virtqueue *vq)
++{
++	rte_free(vq->shadow_used_ring);
++	rte_free(vq->batch_copy_elems);
++	rte_mempool_free(vq->iotlb_pool);
++	rte_free(vq);
++}
++
+ /*
+  * Release virtqueues and device memory.
+  */
+@@ -134,16 +143,9 @@ static void
+ free_device(struct virtio_net *dev)
+ {
+ 	uint32_t i;
+-	struct vhost_virtqueue *vq;
+-
+-	for (i = 0; i < dev->nr_vring; i++) {
+-		vq = dev->virtqueue[i];
+ 
+-		rte_free(vq->shadow_used_ring);
+-		rte_free(vq->batch_copy_elems);
+-		rte_mempool_free(vq->iotlb_pool);
+-		rte_free(vq);
+-	}
++	for (i = 0; i < dev->nr_vring; i++)
++		free_vq(dev->virtqueue[i]);
+ 
+ 	rte_free(dev);
+ }
+diff --git a/dpdk-17.11/lib/librte_vhost/vhost.h b/dpdk-17.11/lib/librte_vhost/vhost.h
+index 1cc81c17c..9cad1bb3c 100644
+--- a/dpdk-17.11/lib/librte_vhost/vhost.h
++++ b/dpdk-17.11/lib/librte_vhost/vhost.h
+@@ -364,6 +364,9 @@ void cleanup_device(struct virtio_net *dev, int destroy);
+ void reset_device(struct virtio_net *dev);
+ void vhost_destroy_device(int);
+ 
++void cleanup_vq(struct vhost_virtqueue *vq, int destroy);
++void free_vq(struct vhost_virtqueue *vq);
++
+ int alloc_vring_queue(struct virtio_net *dev, uint32_t vring_idx);
+ 
+ void vhost_set_ifname(int, const char *if_name, unsigned int if_len);
+-- 
+2.14.3
+

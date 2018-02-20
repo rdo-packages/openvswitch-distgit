@@ -1,13 +1,14 @@
 # Uncomment these for snapshot releases:
-# snapshot is the date YYYYMMDD of the snapshot
-# snap_git is the 8 git sha digits of the last commit
-# Use ovs-snapshot.sh to create the tarball.
-#% define snapshot .git20150730
-#% define snap_gitsha -git72bfa562
+# commit0 is the git sha of the last commit
+# date is the date YYYYMMDD of the snapshot
+#%%global commit0 bd916d13dbb845746983a6780da772154df647ba
+#%%global date 20180219
+%global shortcommit0 %(c=%{commit0}; echo ${c:0:7})
 
 # If wants to run tests while building, specify the '--with check'
 # option. For example:
 # rpmbuild -bb --with check openvswitch.spec
+
 
 # To disable DPDK support, specify '--without dpdk' when building
 %bcond_without dpdk
@@ -27,13 +28,13 @@
 # Enable PIE, bz#955181
 %global _hardened_build 1
 
-%define dpdkver 17.05.2
-%define dpdkdir dpdk-stable
+%define dpdkver 17.11
+%define dpdkdir dpdk
 %define dpdksver %(echo %{dpdkver} | cut -d. -f-2)
 
 Name: openvswitch
-Version: 2.8.1
-Release: 3%{?snapshot}%{?dist}
+Version: 2.9.0
+Release: 1%{?commit0:.%{date}git%{shortcommit0}}%{?dist}
 Summary: Open vSwitch daemon/database/utilities
 
 # Nearly all of openvswitch is ASL 2.0.  The bugtool is LGPLv2+, and the
@@ -41,13 +42,45 @@ Summary: Open vSwitch daemon/database/utilities
 # datapath/ is GPLv2 (although not built into any of the binary packages)
 License: ASL 2.0 and LGPLv2+ and SISSL
 URL: http://openvswitch.org
-Source0: http://openvswitch.org/releases/%{name}-%{version}%{?snap_gitsha}.tar.gz
-Source1: http://fast.dpdk.org/rel/dpdk-%{dpdkver}.tar.gz
-Source2: ovs-snapshot.sh
 
+%if 0%{?commit0:1}
+Source: https://github.com/openvswitch/ovs/archive/%{commit0}.tar.gz#/%{name}-%{shortcommit0}.tar.gz
+%else
+Source: http://openvswitch.org/releases/%{name}-%{version}.tar.gz
+%endif
+Source10: http://fast.dpdk.org/rel/dpdk-%{dpdkver}.tar.gz
+
+Source500: configlib.sh
+Source501: gen_config_group.sh
+Source502: set_config.sh
+
+# Important: source503 is used as the actual copy file
+# @TODO: this causes a warning - fix it?
+Source504: arm64-armv8a-linuxapp-gcc-config
+Source505: ppc_64-power8-linuxapp-gcc-config
+Source506: x86_64-native-linuxapp-gcc-config
+
+# ovs-patches
+
+# OVS (including OVN) backports (0 - 300)
+
+Patch10: 0001-ofproto-dpif-Delete-system-tunnel-interface-when-rem.patch
+
+# DPDK backports (400-500)
+Patch400: 0001-vhost_user_protect_active_rings_from_async_ring_changes.patch
+
+Patch410: 0001-net-enic-fix-crash-due-to-static-max-number-of-queue.patch
+Patch411: 0001-net-enic-fix-L4-Rx-ptype-comparison.patch
+
+Patch420: 0001-vhost-prevent-features-to-be-changed-while-device-is.patch
+Patch421: 0002-vhost-propagate-set-features-handling-error.patch
+Patch422: 0003-vhost-extract-virtqueue-cleaning-and-freeing-functio.patch
+Patch423: 0004-vhost-destroy-unused-virtqueues-when-multiqueue-not-.patch
+Patch424: 0005-vhost-add-flag-for-built-in-virtio-driver.patch
+Patch425: 0006-vhost-drop-virtqueues-only-with-built-in-virtio-driv.patch
 
 %if %{with dpdk}
-%define dpdkarches x86_64 i686 aarch64 ppc64le
+%define dpdkarches x86_64 aarch64 ppc64le
 
 # machine_arch maps between rpm and dpdk arch name, often same as _target_cpu
 # machine_tmpl is the config template machine name, often "native"
@@ -56,11 +89,6 @@ Source2: ovs-snapshot.sh
 %define machine_arch x86_64
 %define machine_tmpl native
 %define machine default
-%endif
-%ifarch i686
-%define machine_arch i686
-%define machine_tmpl native
-%define machine atm
 %endif
 %ifarch aarch64
 %define machine_arch arm64
@@ -107,7 +135,7 @@ Requires: openssl iproute module-init-tools
 
 Requires(post): /usr/bin/getent
 Requires(post): /usr/sbin/useradd
-Requires(post): /usr/bin/sed
+Requires(post): /bin/sed
 Requires(post): /usr/sbin/usermod
 Requires(post): /usr/sbin/groupadd
 Requires(post): systemd-units
@@ -209,22 +237,17 @@ Requires: openvswitch openvswitch-ovn-common python2-openvswitch
 Docker network plugins for OVN.
 
 %prep
-%autosetup -n %{name}-%{version}%{?snap_gitsha} -a 1 -p 1
+%if 0%{?commit0:1}
+%autosetup -n ovs-%{commit0} -a 10 -p 1
+%else
+%autosetup -a 10 -p 1
+%endif
 
 %build
 %if %{with dpdk}
 %ifarch %{dpdkarches}
 # Lets build DPDK first
 cd %{dpdkdir}-%{dpdkver}
-function setconf()
-{
-    cf=%{dpdktarget}/.config
-    if grep -q $1 $cf; then
-        sed -i "s:^$1=.*$:$1=$2:g" $cf
-    else
-        echo $1=$2 >> $cf
-    fi
-}
 
 # In case dpdk-devel is installed
 unset RTE_SDK RTE_INCLUDE RTE_TARGET
@@ -232,7 +255,7 @@ unset RTE_SDK RTE_INCLUDE RTE_TARGET
 # Avoid appending second -Wall to everything, it breaks upstream warning
 # disablers in makefiles. Strip explicit -march= from optflags since they
 # will only guarantee build failures, DPDK is picky with that.
-export EXTRA_CFLAGS="$(echo %{optflags} | sed -e 's:-Wall::g' -e 's:-march=[[:alnum:]]* ::g') -Wformat -fPIC"
+export EXTRA_CFLAGS="$(echo %{optflags} | sed -e 's:-Wall::g' -e 's:-march=[[:alnum:]]* ::g') -Wformat"
 
 # DPDK defaults to using builder-specific compiler flags.  However,
 # the config has been changed by specifying CONFIG_RTE_MACHINE=default
@@ -242,52 +265,8 @@ export EXTRA_CFLAGS="$(echo %{optflags} | sed -e 's:-Wall::g' -e 's:-march=[[:al
 
 make V=1 O=%{dpdktarget} T=%{dpdktarget} %{?_smp_mflags} config
 
-# DPDK defaults to optimizing for the builder host we need generic binaries
-setconf CONFIG_RTE_MACHINE '"%{machine}"'
-
-# Disable DPDK libraries not needed by OVS
-setconf CONFIG_RTE_LIBRTE_TIMER n
-setconf CONFIG_RTE_LIBRTE_CFGFILE n
-setconf CONFIG_RTE_LIBRTE_JOBSTATS n
-setconf CONFIG_RTE_LIBRTE_LPM n
-setconf CONFIG_RTE_LIBRTE_ACL n
-setconf CONFIG_RTE_LIBRTE_POWER n
-setconf CONFIG_RTE_LIBRTE_DISTRIBUTOR n
-setconf CONFIG_RTE_LIBRTE_REORDER n
-setconf CONFIG_RTE_LIBRTE_PORT n
-setconf CONFIG_RTE_LIBRTE_TABLE n
-setconf CONFIG_RTE_LIBRTE_PIPELINE n
-setconf CONFIG_RTE_LIBRTE_KNI n
-setconf CONFIG_RTE_LIBRTE_CRYPTODEV n
-
-# Disable DPDK applications not needed by OVS
-setconf CONFIG_RTE_APP_TEST n
-setconf CONFIG_RTE_APP_CRYPTO_PERF n
-
-# Enable DPDK libraries needed by OVS
-setconf CONFIG_RTE_LIBRTE_VHOST_NUMA y
-setconf CONFIG_RTE_LIBRTE_PMD_PCAP y
-
-# Disable PMDs that are either not needed or not stable
-setconf CONFIG_RTE_LIBRTE_PMD_VHOST n
-setconf CONFIG_RTE_LIBRTE_PMD_NULL_CRYPTO n
-# BNX2X driver is not stable
-setconf CONFIG_RTE_LIBRTE_BNX2X_PMD n
-
-# Disable virtio user as not used by OVS
-setconf CONFIG_RTE_VIRTIO_USER n
-
-# Disable kernel modules
-setconf CONFIG_RTE_EAL_IGB_UIO n
-setconf CONFIG_RTE_KNI_KMOD n
-
-# Disable experimental stuff
-setconf CONFIG_RTE_NEXT_ABI n
-
-# Disable some PMDs on fdProd
-setconf CONFIG_RTE_LIBRTE_BNXT_PMD n
-setconf CONFIG_RTE_LIBRTE_ENA_PMD n
-setconf CONFIG_RTE_LIBRTE_QEDE_PMD n
+cp -f %{SOURCE500} %{SOURCE502} "%{_sourcedir}/%{dpdktarget}-config" .
+%{SOURCE502} %{dpdktarget}-config "%{dpdktarget}/.config"
 
 make V=1 O=%{dpdktarget} %{?_smp_mflags}
 
@@ -311,11 +290,11 @@ cd -
 %endif
 %endif
 
-%if 0%{?snap_gitsha:1}
+%if 0%{?commit0:1}
 # fix the snapshot unreleased version to be the released one.
 sed -i.old -e "s/^AC_INIT(openvswitch,.*,/AC_INIT(openvswitch, %{version},/" configure.ac
-./boot.sh
 %endif
+./boot.sh
 
 %configure \
 %if %{with libcapng}
@@ -329,8 +308,9 @@ sed -i.old -e "s/^AC_INIT(openvswitch,.*,/AC_INIT(openvswitch, %{version},/" con
   --with-dpdk=$(pwd)/%{dpdkdir}-%{dpdkver}/%{dpdktarget} \
 %endif
 %endif
-  --with-pkidir=%{_sharedstatedir}/openvswitch/pki
-/usr/bin/perl build-aux/dpdkstrip.pl \
+  --with-pkidir=%{_sharedstatedir}/openvswitch/pki \
+  PYTHON=/usr/bin/python2
+/usr/bin/python2 build-aux/dpdkstrip.py \
         --dpdk \
         < rhel/usr_lib_systemd_system_ovs-vswitchd.service.in \
         > rhel/usr_lib_systemd_system_ovs-vswitchd.service
@@ -350,7 +330,7 @@ install -p -D -m 0644 rhel/usr_lib_udev_rules.d_91-vfio.rules \
 install -p -D -m 0644 \
         rhel/usr_share_openvswitch_scripts_systemd_sysconfig.template \
         $RPM_BUILD_ROOT/%{_sysconfdir}/sysconfig/openvswitch
-for service in openvswitch ovsdb-server ovs-vswitchd \
+for service in openvswitch ovsdb-server ovs-vswitchd ovs-delete-transient-ports \
                 ovn-controller ovn-controller-vtep ovn-northd; do
         install -p -D -m 0644 \
                 rhel/usr_lib_systemd_system_${service}.service \
@@ -403,8 +383,7 @@ rm -f $RPM_BUILD_ROOT/%{_bindir}/ovs-benchmark \
         $RPM_BUILD_ROOT/%{_bindir}/ovs-parse-backtrace \
         $RPM_BUILD_ROOT/%{_sbindir}/ovs-vlan-bug-workaround \
         $RPM_BUILD_ROOT/%{_mandir}/man1/ovs-benchmark.1* \
-        $RPM_BUILD_ROOT/%{_mandir}/man8/ovs-vlan-bug-workaround.8* \
-        $RPM_BUILD_ROOT/%{_datadir}/openvswitch/scripts/ovs-save
+        $RPM_BUILD_ROOT/%{_mandir}/man8/ovs-vlan-bug-workaround.8*
 
 %check
 %if %{with check}
@@ -606,6 +585,7 @@ fi
 %{_unitdir}/openvswitch.service
 %{_unitdir}/ovs-vswitchd.service
 %{_unitdir}/ovsdb-server.service
+%{_unitdir}/ovs-delete-transient-ports.service
 %{_datadir}/openvswitch/scripts/openvswitch.init
 %{_sysconfdir}/sysconfig/network-scripts/ifup-ovs
 %{_sysconfdir}/sysconfig/network-scripts/ifdown-ovs
@@ -613,6 +593,7 @@ fi
 %{_datadir}/openvswitch/scripts/ovs-bugtool-*
 %{_datadir}/openvswitch/scripts/ovs-check-dead-ifs
 %{_datadir}/openvswitch/scripts/ovs-lib
+%{_datadir}/openvswitch/scripts/ovs-save
 %{_datadir}/openvswitch/scripts/ovs-vtep
 %{_datadir}/openvswitch/scripts/ovs-ctl
 %config %{_datadir}/openvswitch/vswitch.ovsschema
@@ -634,8 +615,11 @@ fi
 %{_mandir}/man1/ovsdb-client.1*
 %{_mandir}/man1/ovsdb-server.1*
 %{_mandir}/man1/ovsdb-tool.1*
+%{_mandir}/man5/ovsdb.5*
 %{_mandir}/man5/ovs-vswitchd.conf.db.5*
 %{_mandir}/man5/vtep.5*
+%{_mandir}/man7/ovsdb-server.7*
+%{_mandir}/man7/ovsdb.7*
 %{_mandir}/man7/ovs-fields.7*
 %{_mandir}/man8/vtep-ctl.8*
 %{_mandir}/man8/ovs-appctl.8*
@@ -699,6 +683,10 @@ fi
 %{_unitdir}/ovn-controller-vtep.service
 
 %changelog
+* Tue Feb 20 2018 Timothy Redaelli <tredaelli@redhat.com> - 2.9.0-1
+- Update to Open vSwitch 2.9.0 and DPDK 17.11
+- Align with RHEL "Fast Datapath" channel 2.9.0-1
+
 * Fri Feb 09 2018 Aaron Conole <aconole@redhat.com> - 2.8.1-2
 - Update to include 94cd8383e297 and 951d79e638ec from upstream
 

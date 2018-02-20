@@ -1,0 +1,310 @@
+From patchwork Wed Jan 17 13:49:25 2018
+Content-Type: text/plain; charset="utf-8"
+MIME-Version: 1.0
+Content-Transfer-Encoding: 7bit
+Subject: [dpdk-dev,
+ v5] vhost_user: protect active rings from async ring changes
+From: Victor Kaplansky <victork@redhat.com>
+X-Patchwork-Id: 33921
+X-Patchwork-Delegate: yuanhan.liu@linux.intel.com
+List-Id: dev.dpdk.org
+To: dev@dpdk.org
+Cc: stable@dpdk.org, Jens Freimann <jfreiman@redhat.com>,
+ Maxime Coquelin <maxime.coquelin@redhat.com>,
+ Yuanhan Liu <yliu@fridaylinux.org>, Tiwei Bie <tiwei.bie@intel.com>, 
+ "Tan, Jianfeng" <jianfeng.tan@intel.com>,
+ Stephen Hemminger <stephen@networkplumber.org>,
+ Victor Kaplansky <victork@redhat.com>
+Date: Wed, 17 Jan 2018 15:49:25 +0200
+
+When performing live migration or memory hot-plugging,
+the changes to the device and vrings made by message handler
+done independently from vring usage by PMD threads.
+
+This causes for example segfaults during live-migration
+with MQ enable, but in general virtually any request
+sent by qemu changing the state of device can cause
+problems.
+
+These patches fixes all above issues by adding a spinlock
+to every vring and requiring message handler to start operation
+only after ensuring that all PMD threads related to the device
+are out of critical section accessing the vring data.
+
+Each vring has its own lock in order to not create contention
+between PMD threads of different vrings and to prevent
+performance degradation by scaling queue pair number.
+
+See https://bugzilla.redhat.com/show_bug.cgi?id=1450680
+
+Signed-off-by: Victor Kaplansky <victork@redhat.com>
+Reviewed-by: Maxime Coquelin <maxime.coquelin@redhat.com>
+---
+v5:
+ o get rid of spinlock wrapping functions in vhost.h
+
+v4:
+
+ o moved access_unlock before accessing enable flag and
+   access_unlock after iommu_unlock consistently.
+ o cosmetics: removed blank line.
+ o the access_lock variable moved to be in the same
+   cache line with enable and access_ok flags.
+ o dequeue path is now guarded with trylock and returning
+   zero if unsuccessful.
+ o GET_VRING_BASE operation is not guarded by access lock
+   to avoid deadlock with device_destroy. See the comment
+   in the code.
+ o Fixed error path exit from enqueue and dequeue carefully
+   unlocking access and iommu locks as appropriate.
+
+v3:
+   o Added locking to enqueue flow.
+   o Enqueue path guarded as well as dequeue path.
+   o Changed name of active_lock.
+   o Added initialization of guarding spinlock.
+   o Reworked functions skimming over all virt-queues.
+   o Performance measurements done by Maxime Coquelin shows
+     no degradation in bandwidth and throughput.
+   o Spelling.
+   o Taking lock only on set operations.
+   o IOMMU messages are not guarded by access lock.
+
+v2:
+   o Fixed checkpatch complains.
+   o Added Signed-off-by.
+   o Refined placement of guard to exclude IOMMU messages.
+   o TODO: performance degradation measurement.
+
+ dpdk-17.11/lib/librte_vhost/vhost.h      |  6 ++--
+ dpdk-17.11/lib/librte_vhost/vhost.c      |  1 +
+ dpdk-17.11/lib/librte_vhost/vhost_user.c | 70 ++++++++++++++++++++++++++++++++
+ dpdk-17.11/lib/librte_vhost/virtio_net.c | 28 ++++++++++++++---
+ 4 files changed, 99 insertions(+), 6 deletions(-)
+
+diff --git a/dpdk-17.11/lib/librte_vhost/vhost.h b/dpdk-17.11/lib/librte_vhost/vhost.h
+index 1cc81c17..c8f2a817 100644
+--- a/dpdk-17.11/lib/librte_vhost/vhost.h
++++ b/dpdk-17.11/lib/librte_vhost/vhost.h
+@@ -108,12 +108,14 @@ struct vhost_virtqueue {
+ 
+ 	/* Backend value to determine if device should started/stopped */
+ 	int			backend;
++	int			enabled;
++	int			access_ok;
++	rte_spinlock_t		access_lock;
++
+ 	/* Used to notify the guest (trigger interrupt) */
+ 	int			callfd;
+ 	/* Currently unused as polling mode is enabled */
+ 	int			kickfd;
+-	int			enabled;
+-	int			access_ok;
+ 
+ 	/* Physical address of used ring, for logging */
+ 	uint64_t		log_guest_addr;
+diff --git a/dpdk-17.11/lib/librte_vhost/vhost.c b/dpdk-17.11/lib/librte_vhost/vhost.c
+index 4f8b73a0..dcc42fc7 100644
+--- a/dpdk-17.11/lib/librte_vhost/vhost.c
++++ b/dpdk-17.11/lib/librte_vhost/vhost.c
+@@ -259,6 +259,7 @@ alloc_vring_queue(struct virtio_net *dev, uint32_t vring_idx)
+ 
+ 	dev->virtqueue[vring_idx] = vq;
+ 	init_vring_queue(dev, vring_idx);
++	rte_spinlock_init(&vq->access_lock);
+ 
+ 	dev->nr_vring += 1;
+ 
+diff --git a/dpdk-17.11/lib/librte_vhost/vhost_user.c b/dpdk-17.11/lib/librte_vhost/vhost_user.c
+index f4c7ce46..0685d4e7 100644
+--- a/dpdk-17.11/lib/librte_vhost/vhost_user.c
++++ b/dpdk-17.11/lib/librte_vhost/vhost_user.c
+@@ -1190,12 +1190,47 @@ vhost_user_check_and_alloc_queue_pair(struct virtio_net *dev, VhostUserMsg *msg)
+ 	return alloc_vring_queue(dev, vring_idx);
+ }
+ 
++static void
++vhost_user_lock_all_queue_pairs(struct virtio_net *dev)
++{
++	unsigned int i = 0;
++	unsigned int vq_num = 0;
++
++	while (vq_num < dev->nr_vring) {
++		struct vhost_virtqueue *vq = dev->virtqueue[i];
++
++		if (vq) {
++			rte_spinlock_lock(&vq->access_lock);
++			vq_num++;
++		}
++		i++;
++	}
++}
++
++static void
++vhost_user_unlock_all_queue_pairs(struct virtio_net *dev)
++{
++	unsigned int i = 0;
++	unsigned int vq_num = 0;
++
++	while (vq_num < dev->nr_vring) {
++		struct vhost_virtqueue *vq = dev->virtqueue[i];
++
++		if (vq) {
++			rte_spinlock_unlock(&vq->access_lock);
++			vq_num++;
++		}
++		i++;
++	}
++}
++
+ int
+ vhost_user_msg_handler(int vid, int fd)
+ {
+ 	struct virtio_net *dev;
+ 	struct VhostUserMsg msg;
+ 	int ret;
++	int unlock_required = 0;
+ 
+ 	dev = get_device(vid);
+ 	if (dev == NULL)
+@@ -1241,6 +1276,38 @@ vhost_user_msg_handler(int vid, int fd)
+ 		return -1;
+ 	}
+ 
++	/*
++	 * Note: we don't lock all queues on VHOST_USER_GET_VRING_BASE,
++	 * since it is sent when virtio stops and device is destroyed.
++	 * destroy_device waits for queues to be inactive, so it is safe.
++	 * Otherwise taking the access_lock would cause a dead lock.
++	 */
++	switch (msg.request.master) {
++	case VHOST_USER_SET_FEATURES:
++	case VHOST_USER_SET_PROTOCOL_FEATURES:
++	case VHOST_USER_SET_OWNER:
++	case VHOST_USER_RESET_OWNER:
++	case VHOST_USER_SET_MEM_TABLE:
++	case VHOST_USER_SET_LOG_BASE:
++	case VHOST_USER_SET_LOG_FD:
++	case VHOST_USER_SET_VRING_NUM:
++	case VHOST_USER_SET_VRING_ADDR:
++	case VHOST_USER_SET_VRING_BASE:
++	case VHOST_USER_SET_VRING_KICK:
++	case VHOST_USER_SET_VRING_CALL:
++	case VHOST_USER_SET_VRING_ERR:
++	case VHOST_USER_SET_VRING_ENABLE:
++	case VHOST_USER_SEND_RARP:
++	case VHOST_USER_NET_SET_MTU:
++	case VHOST_USER_SET_SLAVE_REQ_FD:
++		vhost_user_lock_all_queue_pairs(dev);
++		unlock_required = 1;
++		break;
++	default:
++		break;
++
++	}
++
+ 	switch (msg.request.master) {
+ 	case VHOST_USER_GET_FEATURES:
+ 		msg.payload.u64 = vhost_user_get_features(dev);
+@@ -1342,6 +1409,9 @@ vhost_user_msg_handler(int vid, int fd)
+ 
+ 	}
+ 
++	if (unlock_required)
++		vhost_user_unlock_all_queue_pairs(dev);
++
+ 	if (msg.flags & VHOST_USER_NEED_REPLY) {
+ 		msg.payload.u64 = !!ret;
+ 		msg.size = sizeof(msg.payload.u64);
+diff --git a/dpdk-17.11/lib/librte_vhost/virtio_net.c b/dpdk-17.11/lib/librte_vhost/virtio_net.c
+index 6fee16e5..e09a927d 100644
+--- a/dpdk-17.11/lib/librte_vhost/virtio_net.c
++++ b/dpdk-17.11/lib/librte_vhost/virtio_net.c
+@@ -44,6 +44,7 @@
+ #include <rte_udp.h>
+ #include <rte_sctp.h>
+ #include <rte_arp.h>
++#include <rte_spinlock.h>
+ 
+ #include "iotlb.h"
+ #include "vhost.h"
+@@ -326,8 +327,11 @@ virtio_dev_rx(struct virtio_net *dev, uint16_t queue_id,
+ 	}
+ 
+ 	vq = dev->virtqueue[queue_id];
++
++	rte_spinlock_lock(&vq->access_lock);
++
+ 	if (unlikely(vq->enabled == 0))
+-		return 0;
++		goto out_access_unlock;
+ 
+ 	if (dev->features & (1ULL << VIRTIO_F_IOMMU_PLATFORM))
+ 		vhost_user_iotlb_rd_lock(vq);
+@@ -419,6 +423,9 @@ virtio_dev_rx(struct virtio_net *dev, uint16_t queue_id,
+ 	if (dev->features & (1ULL << VIRTIO_F_IOMMU_PLATFORM))
+ 		vhost_user_iotlb_rd_unlock(vq);
+ 
++out_access_unlock:
++	rte_spinlock_unlock(&vq->access_lock);
++
+ 	return count;
+ }
+ 
+@@ -651,8 +658,11 @@ virtio_dev_merge_rx(struct virtio_net *dev, uint16_t queue_id,
+ 	}
+ 
+ 	vq = dev->virtqueue[queue_id];
++
++	rte_spinlock_lock(&vq->access_lock);
++
+ 	if (unlikely(vq->enabled == 0))
+-		return 0;
++		goto out_access_unlock;
+ 
+ 	if (dev->features & (1ULL << VIRTIO_F_IOMMU_PLATFORM))
+ 		vhost_user_iotlb_rd_lock(vq);
+@@ -715,6 +725,9 @@ virtio_dev_merge_rx(struct virtio_net *dev, uint16_t queue_id,
+ 	if (dev->features & (1ULL << VIRTIO_F_IOMMU_PLATFORM))
+ 		vhost_user_iotlb_rd_unlock(vq);
+ 
++out_access_unlock:
++	rte_spinlock_unlock(&vq->access_lock);
++
+ 	return pkt_idx;
+ }
+ 
+@@ -1180,9 +1193,13 @@ rte_vhost_dequeue_burst(int vid, uint16_t queue_id,
+ 	}
+ 
+ 	vq = dev->virtqueue[queue_id];
+-	if (unlikely(vq->enabled == 0))
++
++	if (unlikely(rte_spinlock_trylock(&vq->access_lock) == 0))
+ 		return 0;
+ 
++	if (unlikely(vq->enabled == 0))
++		goto out_access_unlock;
++
+ 	vq->batch_copy_nb_elems = 0;
+ 
+ 	if (dev->features & (1ULL << VIRTIO_F_IOMMU_PLATFORM))
+@@ -1240,7 +1257,7 @@ rte_vhost_dequeue_burst(int vid, uint16_t queue_id,
+ 		if (rarp_mbuf == NULL) {
+ 			RTE_LOG(ERR, VHOST_DATA,
+ 				"Failed to allocate memory for mbuf.\n");
+-			return 0;
++			goto out;
+ 		}
+ 
+ 		if (make_rarp_packet(rarp_mbuf, &dev->mac)) {
+@@ -1356,6 +1373,9 @@ rte_vhost_dequeue_burst(int vid, uint16_t queue_id,
+ 	if (dev->features & (1ULL << VIRTIO_F_IOMMU_PLATFORM))
+ 		vhost_user_iotlb_rd_unlock(vq);
+ 
++out_access_unlock:
++	rte_spinlock_unlock(&vq->access_lock);
++
+ 	if (unlikely(rarp_mbuf != NULL)) {
+ 		/*
+ 		 * Inject it to the head of "pkts" array, so that switch's mac
