@@ -37,8 +37,7 @@
 %bcond_with ovn_docker
 
 Name: openvswitch
-Summary: Open vSwitch
-Group: System Environment/Daemons daemon/database/utilities
+Summary: Open vSwitch daemon/database/utilities
 URL: http://www.openvswitch.org/
 Version: 2.9.0
 Release: 3%{?commit0:.%{date}git%{shortcommit0}}%{?dist}
