@@ -40,16 +40,13 @@ Name: openvswitch
 Summary: Open vSwitch daemon/database/utilities
 URL: http://www.openvswitch.org/
 Version: 2.9.0
-Release: 3%{?commit0:.%{date}git%{shortcommit0}}%{?dist}
+Release: 4%{?commit0:.%{date}git%{shortcommit0}}%{?dist}
 
 # Nearly all of openvswitch is ASL 2.0.  The bugtool is LGPLv2+, and the
 # lib/sflow*.[ch] files are SISSL
 # datapath/ is GPLv2 (although not built into any of the binary packages)
 License: ASL 2.0 and LGPLv2+ and SISSL
 
-%define dpdkver 17.11
-%define dpdkdir dpdk
-%define dpdksver %(echo %{dpdkver} | cut -d. -f-2)
 # NOTE: DPDK does not currently build for s390x
 %define dpdkarches x86_64 aarch64 ppc64le
 
@@ -58,43 +55,11 @@ Source: https://github.com/openvswitch/ovs/archive/%{commit0}.tar.gz#/%{name}-%{
 %else
 Source: http://openvswitch.org/releases/%{name}-%{version}.tar.gz
 %endif
-Source10: http://fast.dpdk.org/rel/dpdk-%{dpdkver}.tar.xz
-
-Source500: configlib.sh
-Source501: gen_config_group.sh
-Source502: set_config.sh
-
-# Important: source503 is used as the actual copy file
-# @TODO: this causes a warning - fix it?
-Source504: arm64-armv8a-linuxapp-gcc-config
-Source505: ppc_64-power8-linuxapp-gcc-config
-Source506: x86_64-native-linuxapp-gcc-config
 
 # The DPDK is designed to optimize througput of network traffic using, among
 # other techniques, carefully crafted assembly instructions.  As such it
 # needs extensive work to port it to other architectures.
 ExclusiveArch: x86_64 aarch64 ppc64le s390x
-
-# dpdk_mach_arch maps between rpm and dpdk arch name, often same as _target_cpu
-# dpdk_mach_tmpl is the config template dpdk_mach name, often "native"
-# dpdk_mach is the actual dpdk_mach name used in the dpdk make system
-%ifarch x86_64
-%define dpdk_mach_arch x86_64
-%define dpdk_mach_tmpl native
-%define dpdk_mach default
-%endif
-%ifarch aarch64
-%define dpdk_mach_arch arm64
-%define dpdk_mach_tmpl armv8a
-%define dpdk_mach armv8a
-%endif
-%ifarch ppc64le
-%define dpdk_mach_arch ppc_64
-%define dpdk_mach_tmpl power8
-%define dpdk_mach power8
-%endif
-
-%define dpdktarget %{dpdk_mach_arch}-%{dpdk_mach_tmpl}-linuxapp-gcc
 
 # ovs-patches
 
@@ -102,19 +67,15 @@ ExclusiveArch: x86_64 aarch64 ppc64le s390x
 
 Patch10: 0001-ofproto-dpif-Delete-system-tunnel-interface-when-rem.patch
 
+Patch20: 0001-ovn-Calculate-UDP-checksum-for-DNS-over-IPv6.patch
 
-# DPDK backports (400-500)
-Patch400: 0001-vhost_user_protect_active_rings_from_async_ring_changes.patch
+Patch30: 0001-ofproto-dpif-xlate-translate-action_set-in-clone-act.patch
+Patch31: 0002-tests-ofproto-dpif-New-test-for-action_set-after-tra.patch
 
-Patch410: 0001-net-enic-fix-crash-due-to-static-max-number-of-queue.patch
-Patch411: 0001-net-enic-fix-L4-Rx-ptype-comparison.patch
+Patch40: 0001-lib-tc-Handle-error-parsing-action-in-nl_parse_singl.patch
+Patch41: 0002-netdev-tc-offloads-Add-support-for-IP-fragmentation.patch
 
-Patch420: 0001-vhost-prevent-features-to-be-changed-while-device-is.patch
-Patch421: 0002-vhost-propagate-set-features-handling-error.patch
-Patch422: 0003-vhost-extract-virtqueue-cleaning-and-freeing-functio.patch
-Patch423: 0004-vhost-destroy-unused-virtqueues-when-multiqueue-not-.patch
-Patch424: 0005-vhost-add-flag-for-built-in-virtio-driver.patch
-Patch425: 0006-vhost-drop-virtqueues-only-with-built-in-virtio-driv.patch
+Patch50: 0001-rhel-don-t-drop-capabilities-when-running-as-root.patch
 
 
 BuildRequires: gcc
@@ -140,15 +101,7 @@ BuildRequires: libcap-ng libcap-ng-devel
 
 %if %{with dpdk}
 %ifarch %{dpdkarches}
-# DPDK driver dependencies
-BuildRequires: zlib-devel libpcap-devel numactl-devel
-
-# Virtual provide for depending on DPDK-enabled OVS
-Provides: openvswitch-dpdk = %{version}-%{release}
-# Migration path for openvswitch-dpdk package
-Obsoletes: openvswitch-dpdk < 2.6.0
-# Required by packaging policy for the bundled DPDK
-Provides: bundled(dpdk) = %{dpdkver}
+BuildRequires: dpdk-devel libpcap-devel numactl-devel
 %endif
 %endif
 
@@ -156,11 +109,8 @@ Requires: openssl iproute module-init-tools
 #Upstream kernel commit 4f647e0a3c37b8d5086214128614a136064110c3
 #Requires: kernel >= 3.15.0-0
 
-Requires(post): /usr/bin/getent
-Requires(post): /usr/sbin/useradd
+Requires(pre): shadow-utils
 Requires(post): /bin/sed
-Requires(post): /usr/sbin/usermod
-Requires(post): /usr/sbin/groupadd
 Requires(post): systemd-units
 Requires(preun): systemd-units
 Requires(postun): systemd-units
@@ -263,9 +213,9 @@ Docker network plugins for OVN.
 
 %prep
 %if 0%{?commit0:1}
-%autosetup -n ovs-%{commit0} -a 10 -p 1
+%autosetup -n ovs-%{commit0} -p 1
 %else
-%autosetup -a 10 -p 1
+%autosetup -p 1
 %endif
 
 %build
@@ -273,55 +223,9 @@ Docker network plugins for OVN.
 # fix the snapshot unreleased version to be the released one.
 sed -i.old -e "s/^AC_INIT(openvswitch,.*,/AC_INIT(openvswitch, %{version},/" configure.ac
 %endif
+
 ./boot.sh
 
-%if %{with dpdk}
-%ifarch %{dpdkarches}    # build dpdk
-# Lets build DPDK first
-cd %{dpdkdir}-%{dpdkver}
-
-# In case dpdk-devel is installed
-unset RTE_SDK RTE_INCLUDE RTE_TARGET
-
-# Avoid appending second -Wall to everything, it breaks upstream warning
-# disablers in makefiles. Strip explicit -march= from optflags since they
-# will only guarantee build failures, DPDK is picky with that.
-export EXTRA_CFLAGS="$(echo %{optflags} | sed -e 's:-Wall::g' -e 's:-march=[[:alnum:]]* ::g') -Wformat -fPIC"
-
-# DPDK defaults to using builder-specific compiler flags.  However,
-# the config has been changed by specifying CONFIG_RTE_MACHINE=default
-# in order to build for a more generic host.  NOTE: It is possible that
-# the compiler flags used still won't work for all Fedora-supported
-# machines, but runtime checks in DPDK will catch those situations.
-
-make V=1 O=%{dpdktarget} T=%{dpdktarget} %{?_smp_mflags} config
-
-cp -f %{SOURCE500} %{SOURCE502} "%{_sourcedir}/%{dpdktarget}-config" .
-%{SOURCE502} %{dpdktarget}-config "%{dpdktarget}/.config"
-
-make V=1 O=%{dpdktarget} %{?_smp_mflags}
-
-# Generate a list of supported drivers, its hard to tell otherwise.
-cat << EOF > README.DPDK-PMDS
-DPDK drivers included in this package:
-
-EOF
-
-for f in $(ls %{dpdk_mach_arch}-%{dpdk_mach_tmpl}-linuxapp-gcc/lib/lib*_pmd_*); do
-    basename ${f} | cut -c12- | cut -d. -f1 | tr [:lower:] [:upper:]
-done >> README.DPDK-PMDS
-
-cat << EOF >> README.DPDK-PMDS
-
-For further information about the drivers, see
-http://dpdk.org/doc/guides-%{dpdksver}/nics/index.html
-EOF
-
-cd -
-%endif    # build dpdk
-%endif
-
-# And now for OVS...
 %configure \
 %if %{with libcapng}
         --enable-libcapng \
@@ -331,7 +235,7 @@ cd -
   --enable-ssl \
 %if %{with dpdk}
 %ifarch %{dpdkarches}
-  --with-dpdk=$(pwd)/%{dpdkdir}-%{dpdkver}/%{dpdktarget} \
+  --with-dpdk \
 %endif
 %endif
   --with-pkidir=%{_sharedstatedir}/openvswitch/pki \
@@ -488,23 +392,24 @@ rm -rf $RPM_BUILD_ROOT
     fi
 %endif
 
+%pre
+getent group openvswitch >/dev/null || groupadd -r openvswitch
+getent passwd openvswitch >/dev/null || \
+    useradd -r -g openvswitch -d / -s /sbin/nologin \
+    -c "Open vSwitch Daemons" openvswitch
+getent group hugetlbfs >/dev/null || groupadd hugetlbfs
+usermod -a -G hugetlbfs openvswitch
+exit 0
+
 %post
 if [ $1 -eq 1 ]; then
-    getent passwd openvswitch >/dev/null || \
-        useradd -r -d / -s /sbin/nologin -c "Open vSwitch Daemons" openvswitch
-
     sed -i 's:^#OVS_USER_ID=:OVS_USER_ID=:' /etc/sysconfig/openvswitch
 
-    getent group hugetlbfs >/dev/null || \
-        groupadd hugetlbfs
-    usermod -a -G hugetlbfs openvswitch
     sed -i \
         's@OVS_USER_ID="openvswitch:openvswitch"@OVS_USER_ID="openvswitch:hugetlbfs"@'\
         /etc/sysconfig/openvswitch
-
-    # In the case of upgrade, this is not needed.
-    chown -R openvswitch:openvswitch /etc/openvswitch
 fi
+chown -R openvswitch:openvswitch /etc/openvswitch
 
 %if 0%{?systemd_post:1}
     %systemd_post %{name}.service
@@ -618,12 +523,13 @@ fi
 
 %files
 %defattr(-,openvswitch,openvswitch)
-%verify(not owner group) %dir %{_sysconfdir}/openvswitch
-%verify(not owner group) %{_sysconfdir}/openvswitch/default.conf
+%dir %{_sysconfdir}/openvswitch
+%{_sysconfdir}/openvswitch/default.conf
 %config %ghost %verify(not owner group md5 size mtime) %{_sysconfdir}/openvswitch/conf.db
-%config %ghost %verify(not owner group md5 size mtime) %{_sysconfdir}/openvswitch/system-id.conf
-%config(noreplace) %verify(not owner group md5 size mtime) %{_sysconfdir}/sysconfig/openvswitch
+%ghost %attr(0600,-,-) %verify(not owner group md5 size mtime) %{_sysconfdir}/openvswitch/.conf.db.~lock~
+%config %ghost %{_sysconfdir}/openvswitch/system-id.conf
 %defattr(-,root,root)
+%config(noreplace) %{_sysconfdir}/sysconfig/openvswitch
 %{_sysconfdir}/bash_completion.d/ovs-appctl-bashcomp.bash
 %{_sysconfdir}/bash_completion.d/ovs-vsctl-bashcomp.bash
 %config(noreplace) %{_sysconfdir}/logrotate.d/openvswitch
@@ -678,14 +584,9 @@ fi
 %{_mandir}/man8/ovs-parse-backtrace.8*
 %{_udevrulesdir}/91-vfio.rules
 %doc COPYING NOTICE README.rst NEWS rhel/README.RHEL.rst
-%if %{with dpdk}
-%ifarch %{dpdkarches}
-%doc dpdk-%{dpdkver}/README.DPDK-PMDS
-%endif
-%endif
 /var/lib/openvswitch
 %attr(755,-,-) /var/log/openvswitch
-%ghost %attr(755,root,root) %{_rundir}/openvswitch
+%ghost %attr(755,root,root) %verify(not owner group) %{_rundir}/openvswitch
 
 %if %{with ovn_docker}
 %files ovn-docker
@@ -733,6 +634,12 @@ fi
 %{_unitdir}/ovn-controller-vtep.service
 
 %changelog
+* Tue Apr 10 2018 Timothy Redaelli <tredaelli@redhat.com> - 2.9.0-4
+- Align with with RHEL "Fast Datapath" 2.9.0-15
+- Backport "rhel: don't drop capabilities when running as root"
+- Change owner of /etc/openvswitch during upgrade
+- Use DPDK as shared library
+
 * Tue Feb 20 2018 Iryna Shcherbina <ishcherb@redhat.com> - 2.9.0-3
 - Update Python 2 dependency declarations to new packaging standards
   (See https://fedoraproject.org/wiki/FinalizingFedoraSwitchtoPython3)

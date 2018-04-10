@@ -1,0 +1,185 @@
+From a99f73a22e6303555af3f93535d03c7537da5a9a Mon Sep 17 00:00:00 2001
+From: Roi Dayan <roid@mellanox.com>
+Date: Mon, 12 Mar 2018 14:58:47 +0200
+Subject: [PATCH 2/2] netdev-tc-offloads: Add support for IP fragmentation
+
+Add support for frag no, first and later.
+
+Signed-off-by: Roi Dayan <roid@mellanox.com>
+Reviewed-by: Shahar Klein <shahark@mellanox.com>
+Reviewed-by: Paul Blakey <paulb@mellanox.com>
+Signed-off-by: Simon Horman <simon.horman@netronome.com>
+---
+ acinclude.m4             |  6 +++---
+ include/linux/pkt_cls.h  |  5 +++--
+ lib/netdev-tc-offloads.c | 38 ++++++++++++++++++++++++++++++++------
+ lib/tc.c                 | 14 ++++++++++++++
+ lib/tc.h                 |  1 +
+ 5 files changed, 53 insertions(+), 11 deletions(-)
+
+diff --git a/acinclude.m4 b/acinclude.m4
+index 176b93e8e..6a02f6527 100644
+--- a/acinclude.m4
++++ b/acinclude.m4
+@@ -178,10 +178,10 @@ dnl Configure Linux tc compat.
+ AC_DEFUN([OVS_CHECK_LINUX_TC], [
+   AC_COMPILE_IFELSE([
+     AC_LANG_PROGRAM([#include <linux/pkt_cls.h>], [
+-        int x = TCA_FLOWER_KEY_IP_TTL_MASK;
++        int x = TCA_FLOWER_KEY_FLAGS_FRAG_IS_FIRST;
+     ])],
+-    [AC_DEFINE([HAVE_TCA_FLOWER_KEY_IP_TTL_MASK], [1],
+-               [Define to 1 if TCA_FLOWER_KEY_IP_TTL_MASK is avaiable.])])
++    [AC_DEFINE([HAVE_TCA_FLOWER_KEY_FLAGS_FRAG_IS_FIRST], [1],
++               [Define to 1 if TCA_FLOWER_KEY_FLAGS_FRAG_IS_FIRST is avaiable.])])
+ 
+   AC_COMPILE_IFELSE([
+     AC_LANG_PROGRAM([#include <linux/tc_act/tc_vlan.h>], [
+diff --git a/include/linux/pkt_cls.h b/include/linux/pkt_cls.h
+index f7bc7ea70..60976f3f7 100644
+--- a/include/linux/pkt_cls.h
++++ b/include/linux/pkt_cls.h
+@@ -1,7 +1,7 @@
+ #ifndef __LINUX_PKT_CLS_WRAPPER_H
+ #define __LINUX_PKT_CLS_WRAPPER_H 1
+ 
+-#if defined(__KERNEL__) || defined(HAVE_TCA_FLOWER_KEY_IP_TTL_MASK)
++#if defined(__KERNEL__) || defined(HAVE_TCA_FLOWER_KEY_FLAGS_FRAG_IS_FIRST)
+ #include_next <linux/pkt_cls.h>
+ #else
+ 
+@@ -201,8 +201,9 @@ enum {
+ 
+ enum {
+ 	TCA_FLOWER_KEY_FLAGS_IS_FRAGMENT = (1 << 0),
++	TCA_FLOWER_KEY_FLAGS_FRAG_IS_FIRST = (1 << 1),
+ };
+ 
+-#endif /* __KERNEL__ || !HAVE_TCA_FLOWER_KEY_IP_TTL_MASK */
++#endif /* __KERNEL__ || !HAVE_TCA_FLOWER_KEY_FLAGS_FRAG_IS_FIRST */
+ 
+ #endif /* __LINUX_PKT_CLS_WRAPPER_H */
+diff --git a/lib/netdev-tc-offloads.c b/lib/netdev-tc-offloads.c
+index 9364d94f0..f22415ee1 100644
+--- a/lib/netdev-tc-offloads.c
++++ b/lib/netdev-tc-offloads.c
+@@ -428,6 +428,27 @@ parse_tc_flower_to_match(struct tc_flower *flower,
+ 
+         match_set_nw_ttl_masked(match, key->ip_ttl, mask->ip_ttl);
+ 
++        if (mask->flags) {
++            uint8_t flags = 0;
++            uint8_t flags_mask = 0;
++
++            if (mask->flags & TCA_FLOWER_KEY_FLAGS_IS_FRAGMENT) {
++                if (key->flags & TCA_FLOWER_KEY_FLAGS_IS_FRAGMENT) {
++                    flags |= FLOW_NW_FRAG_ANY;
++                }
++                flags_mask |= FLOW_NW_FRAG_ANY;
++            }
++
++            if (mask->flags & TCA_FLOWER_KEY_FLAGS_FRAG_IS_FIRST) {
++                if (!(key->flags & TCA_FLOWER_KEY_FLAGS_FRAG_IS_FIRST)) {
++                    flags |= FLOW_NW_FRAG_LATER;
++                }
++                flags_mask |= FLOW_NW_FRAG_LATER;
++            }
++
++            match_set_nw_frag_masked(match, flags, flags_mask);
++        }
++
+         match_set_nw_src_masked(match, key->ipv4.ipv4_src, mask->ipv4.ipv4_src);
+         match_set_nw_dst_masked(match, key->ipv4.ipv4_dst, mask->ipv4.ipv4_dst);
+ 
+@@ -780,11 +801,6 @@ test_key_and_mask(struct match *match)
+         return EOPNOTSUPP;
+     }
+ 
+-    if (mask->nw_frag) {
+-        VLOG_DBG_RL(&rl, "offloading attribute nw_frag isn't supported");
+-        return EOPNOTSUPP;
+-    }
+-
+     for (int i = 0; i < FLOW_MAX_MPLS_LABELS; i++) {
+         if (mask->mpls_lse[i]) {
+             VLOG_DBG_RL(&rl, "offloading attribute mpls_lse isn't supported");
+@@ -932,6 +948,17 @@ netdev_tc_flow_put(struct netdev *netdev, struct match *match,
+         flower.key.ip_ttl = key->nw_ttl;
+         flower.mask.ip_ttl = mask->nw_ttl;
+ 
++        if (mask->nw_frag) {
++            if (key->nw_frag & FLOW_NW_FRAG_ANY)
++                flower.key.flags |= TCA_FLOWER_KEY_FLAGS_IS_FRAGMENT;
++            if (!(key->nw_frag & FLOW_NW_FRAG_LATER))
++                flower.key.flags |= TCA_FLOWER_KEY_FLAGS_FRAG_IS_FIRST;
++
++            flower.mask.flags |= TCA_FLOWER_KEY_FLAGS_IS_FRAGMENT;
++            flower.mask.flags |= TCA_FLOWER_KEY_FLAGS_FRAG_IS_FIRST;
++            mask->nw_frag = 0;
++        }
++
+         if (key->nw_proto == IPPROTO_TCP) {
+             flower.key.tcp_dst = key->tp_dst;
+             flower.mask.tcp_dst = mask->tp_dst;
+@@ -958,7 +985,6 @@ netdev_tc_flow_put(struct netdev *netdev, struct match *match,
+             mask->tp_dst = 0;
+         }
+ 
+-        mask->nw_frag = 0;
+         mask->nw_tos = 0;
+         mask->nw_proto = 0;
+         mask->nw_ttl = 0;
+diff --git a/lib/tc.c b/lib/tc.c
+index b49bbe89b..c446d8407 100644
+--- a/lib/tc.c
++++ b/lib/tc.c
+@@ -281,6 +281,8 @@ static const struct nl_policy tca_flower_policy[] = {
+                                            .optional = true, },
+     [TCA_FLOWER_KEY_ENC_UDP_DST_PORT] = { .type = NL_A_U16,
+                                           .optional = true, },
++    [TCA_FLOWER_KEY_FLAGS] = { .type = NL_A_BE32, .optional = true, },
++    [TCA_FLOWER_KEY_FLAGS_MASK] = { .type = NL_A_BE32, .optional = true, },
+     [TCA_FLOWER_KEY_IP_TTL] = { .type = NL_A_U8,
+                                 .optional = true, },
+     [TCA_FLOWER_KEY_IP_TTL_MASK] = { .type = NL_A_U8,
+@@ -374,6 +376,11 @@ nl_parse_flower_ip(struct nlattr **attrs, struct tc_flower *flower) {
+         mask->ip_proto = UINT8_MAX;
+     }
+ 
++    if (attrs[TCA_FLOWER_KEY_FLAGS_MASK]) {
++        key->flags = ntohl(nl_attr_get_u32(attrs[TCA_FLOWER_KEY_FLAGS]));
++        mask->flags = ntohl(nl_attr_get_u32(attrs[TCA_FLOWER_KEY_FLAGS_MASK]));
++    }
++
+     if (attrs[TCA_FLOWER_KEY_IPV4_SRC_MASK]) {
+         key->ipv4.ipv4_src =
+             nl_attr_get_be32(attrs[TCA_FLOWER_KEY_IPV4_SRC]);
+@@ -1495,6 +1502,13 @@ nl_msg_put_flower_options(struct ofpbuf *request, struct tc_flower *flower)
+                           flower->key.ip_proto);
+         }
+ 
++        if (flower->mask.flags) {
++            nl_msg_put_u32(request, TCA_FLOWER_KEY_FLAGS,
++                           htonl(flower->key.flags));
++            nl_msg_put_u32(request, TCA_FLOWER_KEY_FLAGS_MASK,
++                           htonl(flower->mask.flags));
++        }
++
+         if (flower->key.ip_proto == IPPROTO_UDP) {
+             FLOWER_PUT_MASKED_VALUE(udp_src, TCA_FLOWER_KEY_UDP_SRC);
+             FLOWER_PUT_MASKED_VALUE(udp_dst, TCA_FLOWER_KEY_UDP_DST);
+diff --git a/lib/tc.h b/lib/tc.h
+index 6af51c69b..4400a829e 100644
+--- a/lib/tc.h
++++ b/lib/tc.h
+@@ -92,6 +92,7 @@ struct tc_flower_key {
+ 
+     ovs_be16 encap_eth_type;
+ 
++    uint8_t flags;
+     uint8_t ip_ttl;
+ 
+     struct {
+-- 
+2.14.3
+

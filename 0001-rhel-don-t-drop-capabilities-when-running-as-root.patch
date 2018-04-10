@@ -1,0 +1,81 @@
+From 6796c04a9afacf2d09248509d54d5ea586050a3c Mon Sep 17 00:00:00 2001
+From: Aaron Conole <aconole@redhat.com>
+Date: Tue, 13 Feb 2018 16:42:16 -0500
+Subject: [PATCH] rhel: don't drop capabilities when running as root
+
+Currently, regardless of which user is being set as the running user,
+Open vSwitch daemons on RHEL systems drop capabilities.  This means the
+very powerful CAP_SYS_ADMIN is dropped, even when the user is 'root'.
+
+For the majority of use cases this behavior works, as the user can
+enable or disable various configurations, regardless of which datapath
+functions are desired.  However, when using certain DPDK PMDs, the
+enablement and configuration calls require CAP_SYS_ADMIN.
+
+Instead of retaining CAP_SYS_ADMIN in all cases, which would practically
+nullify the uid/gid and privilege drop, we don't pass the --ovs-user
+option to the daemons.  This shunts the capability and privilege
+dropping code.
+
+Reported-by: Marcos Felipe Schwarz <marcos.f.sch@gmail.com>
+Reported-at: https://mail.openvswitch.org/pipermail/ovs-discuss/2018-January/045955.html
+Fixes: e3e738a3d058 ("redhat: allow dpdk to also run as non-root user")
+Signed-off-by: Aaron Conole <aconole@redhat.com>
+Acked-By: Timothy Redaelli <tredaelli@redhat.com>
+Signed-off-by: Russell Bryant <russell@ovn.org>
+---
+ rhel/usr_lib_systemd_system_ovs-vswitchd.service.in | 7 ++++---
+ rhel/usr_lib_systemd_system_ovsdb-server.service    | 6 ++++--
+ 2 files changed, 8 insertions(+), 5 deletions(-)
+
+diff --git a/rhel/usr_lib_systemd_system_ovs-vswitchd.service.in b/rhel/usr_lib_systemd_system_ovs-vswitchd.service.in
+index c6d9aa1b8..889740f1a 100644
+--- a/rhel/usr_lib_systemd_system_ovs-vswitchd.service.in
++++ b/rhel/usr_lib_systemd_system_ovs-vswitchd.service.in
+@@ -13,17 +13,18 @@ Restart=on-failure
+ Environment=HOME=/var/run/openvswitch
+ EnvironmentFile=/etc/openvswitch/default.conf
+ EnvironmentFile=-/etc/sysconfig/openvswitch
++EnvironmentFile=-/run/openvswitch/useropts
+ @begin_dpdk@
+-ExecStartPre=-/usr/bin/chown :hugetlbfs /dev/hugepages
++ExecStartPre=-/bin/sh -c '/usr/bin/chown :${OVS_USER_ID##*:} /dev/hugepages'
+ ExecStartPre=-/usr/bin/chmod 0775 /dev/hugepages
+ @end_dpdk@
+ ExecStart=/usr/share/openvswitch/scripts/ovs-ctl \
+           --no-ovsdb-server --no-monitor --system-id=random \
+-          --ovs-user=${OVS_USER_ID} \
++          ${OVSUSER} \
+           start $OPTIONS
+ ExecStop=/usr/share/openvswitch/scripts/ovs-ctl --no-ovsdb-server stop
+ ExecReload=/usr/share/openvswitch/scripts/ovs-ctl --no-ovsdb-server \
+           --no-monitor --system-id=random \
+-          --ovs-user=${OVS_USER_ID} \
++          ${OVSUSER} \
+           restart $OPTIONS
+ TimeoutSec=300
+diff --git a/rhel/usr_lib_systemd_system_ovsdb-server.service b/rhel/usr_lib_systemd_system_ovsdb-server.service
+index 234d39355..e05742d87 100644
+--- a/rhel/usr_lib_systemd_system_ovsdb-server.service
++++ b/rhel/usr_lib_systemd_system_ovsdb-server.service
+@@ -11,13 +11,15 @@ Restart=on-failure
+ EnvironmentFile=/etc/openvswitch/default.conf
+ EnvironmentFile=-/etc/sysconfig/openvswitch
+ ExecStartPre=/usr/bin/chown ${OVS_USER_ID} /var/run/openvswitch
++ExecStartPre=/bin/sh -c 'rm -f /run/openvswitch/useropts; if [ "${OVS_USER_ID/:*/}" != "root" ]; then /usr/bin/echo "OVSUSER=--ovs-user=${OVS_USER_ID}" > /run/openvswitch/useropts; fi'
++EnvironmentFile=-/run/openvswitch/useropts
+ ExecStart=/usr/share/openvswitch/scripts/ovs-ctl \
+           --no-ovs-vswitchd --no-monitor --system-id=random \
+-          --ovs-user=${OVS_USER_ID} \
++          ${OVSUSER} \
+           start $OPTIONS
+ ExecStop=/usr/share/openvswitch/scripts/ovs-ctl --no-ovs-vswitchd stop
+ ExecReload=/usr/share/openvswitch/scripts/ovs-ctl --no-ovs-vswitchd \
+-           --ovs-user=${OVS_USER_ID} \
++           ${OVSUSER} \
+            --no-monitor restart $OPTIONS
+ RuntimeDirectory=openvswitch
+ RuntimeDirectoryMode=0755
+-- 
+2.14.3
+
