@@ -39,8 +39,8 @@
 Name: openvswitch
 Summary: Open vSwitch daemon/database/utilities
 URL: http://www.openvswitch.org/
-Version: 2.9.0
-Release: 4%{?commit0:.%{date}git%{shortcommit0}}%{?dist}
+Version: 2.9.1
+Release: 1%{?commit0:.%{date}git%{shortcommit0}}%{?dist}
 
 # Nearly all of openvswitch is ASL 2.0.  The bugtool is LGPLv2+, and the
 # lib/sflow*.[ch] files are SISSL
@@ -67,15 +67,9 @@ ExclusiveArch: x86_64 aarch64 ppc64le s390x
 
 Patch10: 0001-ofproto-dpif-Delete-system-tunnel-interface-when-rem.patch
 
-Patch20: 0001-ovn-Calculate-UDP-checksum-for-DNS-over-IPv6.patch
-
-Patch30: 0001-ofproto-dpif-xlate-translate-action_set-in-clone-act.patch
-Patch31: 0002-tests-ofproto-dpif-New-test-for-action_set-after-tra.patch
-
-Patch40: 0001-lib-tc-Handle-error-parsing-action-in-nl_parse_singl.patch
 Patch41: 0002-netdev-tc-offloads-Add-support-for-IP-fragmentation.patch
-
-Patch50: 0001-rhel-don-t-drop-capabilities-when-running-as-root.patch
+Patch42: 0001-lib-netdev-tc-offloads-Fix-frag-first-later-translat.patch
+Patch43: 0002-lib-tc-Fix-sparse-warnings.patch
 
 
 BuildRequires: gcc
@@ -634,6 +628,9 @@ chown -R openvswitch:openvswitch /etc/openvswitch
 %{_unitdir}/ovn-controller-vtep.service
 
 %changelog
+* Tue May 22 2018 Timothy Redaelli <tredaelli@redhat.com> - 2.9.1-1
+- Update to OVS 2.9.1
+
 * Tue Apr 10 2018 Timothy Redaelli <tredaelli@redhat.com> - 2.9.0-4
 - Align with with RHEL "Fast Datapath" 2.9.0-15
 - Backport "rhel: don't drop capabilities when running as root"
