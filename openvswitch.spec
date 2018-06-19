@@ -39,8 +39,8 @@
 Name: openvswitch
 Summary: Open vSwitch daemon/database/utilities
 URL: http://www.openvswitch.org/
-Version: 2.9.1
-Release: 2%{?commit0:.%{date}git%{shortcommit0}}%{?dist}
+Version: 2.9.2
+Release: 1%{?commit0:.%{date}git%{shortcommit0}}%{?dist}
 
 # Nearly all of openvswitch is ASL 2.0.  The bugtool is LGPLv2+, and the
 # lib/sflow*.[ch] files are SISSL
@@ -64,7 +64,6 @@ ExclusiveArch: x86_64 aarch64 ppc64le s390x
 # ovs-patches
 
 # OVS (including OVN) backports (0 - 300)
-
 Patch10: 0001-ofproto-dpif-Delete-system-tunnel-interface-when-rem.patch
 
 Patch41: 0002-netdev-tc-offloads-Add-support-for-IP-fragmentation.patch
@@ -560,6 +559,7 @@ chown -R openvswitch:openvswitch /etc/openvswitch
 %{_mandir}/man1/ovsdb-server.1*
 %{_mandir}/man1/ovsdb-tool.1*
 %{_mandir}/man5/ovsdb.5*
+%{_mandir}/man5/ovsdb-server.5*
 %{_mandir}/man5/ovs-vswitchd.conf.db.5*
 %{_mandir}/man5/vtep.5*
 %{_mandir}/man7/ovsdb-server.7*
@@ -628,6 +628,9 @@ chown -R openvswitch:openvswitch /etc/openvswitch
 %{_unitdir}/ovn-controller-vtep.service
 
 %changelog
+* Tue Jun 19 2018 Timothy Redaelli <tredaelli@redhat.com> - 2.9.2-1
+- Update to OVS 2.9.2
+
 * Tue Jun 19 2018 Miro Hrončok <mhroncok@redhat.com> - 2.9.1-2
 - Rebuilt for Python 3.7
 
