@@ -323,8 +323,7 @@ rm -f $RPM_BUILD_ROOT/%{_bindir}/ovn-docker-overlay-driver \
 
 %check
 %if %{with check}
-    if make check TESTSUITEFLAGS='%{_smp_mflags}' ||
-       make check TESTSUITEFLAGS='--recheck'; then :;
+    if make check; then :;
     else
         cat tests/testsuite.log
         exit 1
@@ -630,6 +629,7 @@ chown -R openvswitch:openvswitch /etc/openvswitch
 %changelog
 * Tue Jun 19 2018 Timothy Redaelli <tredaelli@redhat.com> - 2.9.2-1
 - Update to OVS 2.9.2
+- Do not run "make check" simultaneously.
 
 * Tue Jun 19 2018 Miro Hrončok <mhroncok@redhat.com> - 2.9.1-2
 - Rebuilt for Python 3.7
