@@ -64,6 +64,7 @@ ExclusiveArch: x86_64 aarch64 ppc64le s390x
 # ovs-patches
 
 # OVS (including OVN) backports (0 - 300)
+Patch0:  ovs-dev-ofproto-macros-Ignore-Dropped-log-messages-in-check_logs..patch
 Patch10: 0001-ofproto-dpif-Delete-system-tunnel-interface-when-rem.patch
 
 Patch41: 0002-netdev-tc-offloads-Add-support-for-IP-fragmentation.patch
@@ -323,7 +324,7 @@ rm -f $RPM_BUILD_ROOT/%{_bindir}/ovn-docker-overlay-driver \
 
 %check
 %if %{with check}
-    if make check; then :;
+    if make check TESTSUITEFLAGS='%{_smp_mflags}' RECHECK=yes; then :;
     else
         cat tests/testsuite.log
         exit 1
@@ -629,7 +630,7 @@ chown -R openvswitch:openvswitch /etc/openvswitch
 %changelog
 * Tue Jun 19 2018 Timothy Redaelli <tredaelli@redhat.com> - 2.9.2-1
 - Update to OVS 2.9.2
-- Do not run "make check" simultaneously.
+- Backport a patch to make some tests pass on Fedora Rawhide
 
 * Tue Jun 19 2018 Miro Hrončok <mhroncok@redhat.com> - 2.9.1-2
 - Rebuilt for Python 3.7
