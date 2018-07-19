@@ -72,6 +72,7 @@ Patch42: 0001-lib-netdev-tc-offloads-Fix-frag-first-later-translat.patch
 Patch43: 0002-lib-tc-Fix-sparse-warnings.patch
 
 
+BuildRequires:  gcc-c++
 BuildRequires: gcc
 BuildRequires: python2-sphinx
 BuildRequires: autoconf automake libtool
