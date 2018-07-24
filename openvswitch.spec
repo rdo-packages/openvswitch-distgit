@@ -40,7 +40,7 @@ Name: openvswitch
 Summary: Open vSwitch daemon/database/utilities
 URL: http://www.openvswitch.org/
 Version: 2.9.2
-Release: 3%{?commit0:.%{date}git%{shortcommit0}}%{?dist}
+Release: 4%{?commit0:.%{date}git%{shortcommit0}}%{?dist}
 
 # Nearly all of openvswitch is ASL 2.0.  The bugtool is LGPLv2+, and the
 # lib/sflow*.[ch] files are SISSL
@@ -152,6 +152,16 @@ License: ASL 2.0
 %description devel
 This provides shared library, libopenswitch.so and the openvswitch header
 files needed to build an external application.
+
+%package -n network-scripts-%{name}
+Summary: Open vSwitch legacy network service support
+License: ASL 2.0
+Requires: network-scripts
+Supplements: (%{name} and network-scripts)
+
+%description -n network-scripts-%{name}
+This provides the ifup and ifdown scripts for use with the legacy network
+service.
 
 %package ovn-central
 Summary: Open vSwitch - Open Virtual Network support
@@ -526,6 +536,10 @@ chown -R openvswitch:openvswitch /etc/openvswitch
 %{_includedir}/ovn/*
 %exclude %{_libdir}/*.la
 
+%files -n network-scripts-%{name}
+%{_sysconfdir}/sysconfig/network-scripts/ifup-ovs
+%{_sysconfdir}/sysconfig/network-scripts/ifdown-ovs
+
 %files
 %defattr(-,openvswitch,openvswitch)
 %dir %{_sysconfdir}/openvswitch
@@ -543,8 +557,6 @@ chown -R openvswitch:openvswitch /etc/openvswitch
 %{_unitdir}/ovs-vswitchd.service
 %{_unitdir}/ovs-delete-transient-ports.service
 %{_datadir}/openvswitch/scripts/openvswitch.init
-%{_sysconfdir}/sysconfig/network-scripts/ifup-ovs
-%{_sysconfdir}/sysconfig/network-scripts/ifdown-ovs
 %{_datadir}/openvswitch/bugtool-plugins/
 %{_datadir}/openvswitch/scripts/ovs-bugtool-*
 %{_datadir}/openvswitch/scripts/ovs-check-dead-ifs
@@ -641,6 +653,9 @@ chown -R openvswitch:openvswitch /etc/openvswitch
 %{_unitdir}/ovn-controller-vtep.service
 
 %changelog
+* Mon Aug 06 2018 Lubomir Rintel <lkundrak@v3.sk> - 2.9.2-4
+- Split out the network-scripts
+
 * Wed Aug 01 2018 Timothy Redaelli <tredaelli@redhat.com> - 2.9.2-3
 - Build OVS as shared library
 - Build the C json native extension for Python (60x faster)
