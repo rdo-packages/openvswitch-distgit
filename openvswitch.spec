@@ -40,7 +40,7 @@ Name: openvswitch
 Summary: Open vSwitch daemon/database/utilities
 URL: http://www.openvswitch.org/
 Version: 2.9.2
-Release: 2%{?commit0:.%{date}git%{shortcommit0}}%{?dist}
+Release: 3%{?commit0:.%{date}git%{shortcommit0}}%{?dist}
 
 # Nearly all of openvswitch is ASL 2.0.  The bugtool is LGPLv2+, and the
 # lib/sflow*.[ch] files are SISSL
@@ -72,7 +72,7 @@ Patch42: 0001-lib-netdev-tc-offloads-Fix-frag-first-later-translat.patch
 Patch43: 0002-lib-tc-Fix-sparse-warnings.patch
 
 
-BuildRequires:  gcc-c++
+BuildRequires: gcc-c++
 BuildRequires: gcc
 BuildRequires: python2-sphinx
 BuildRequires: autoconf automake libtool
@@ -119,7 +119,6 @@ traffic.
 %package -n python2-openvswitch
 Summary: Open vSwitch python2 bindings
 License: ASL 2.0
-BuildArch: noarch
 Requires: python2 python2-six
 Obsoletes: python-openvswitch < 2.6.1-2
 Provides: python-openvswitch = %{version}-%{release}
@@ -130,7 +129,6 @@ Python bindings for the Open vSwitch database
 %package -n python3-openvswitch
 Summary: Open vSwitch python3 bindings
 License: ASL 2.0
-BuildArch: noarch
 Requires: python3 python3-six
 
 %description -n python3-openvswitch
@@ -150,10 +148,9 @@ issues in Open vSwitch setup.
 %package devel
 Summary: Open vSwitch OpenFlow development package (library, headers)
 License: ASL 2.0
-Provides: openvswitch-static = %{version}-%{release}
 
 %description devel
-This provides static library, libopenswitch.a and the openvswitch header
+This provides shared library, libopenswitch.so and the openvswitch header
 files needed to build an external application.
 
 %package ovn-central
@@ -227,7 +224,9 @@ sed -i.old -e "s/^AC_INIT(openvswitch,.*,/AC_INIT(openvswitch, %{version},/" con
 %else
         --disable-libcapng \
 %endif
-  --enable-ssl \
+        --disable-static \
+        --enable-shared \
+        --enable-ssl \
 %if %{with dpdk}
 %ifarch %{dpdkarches}
   --with-dpdk \
@@ -281,12 +280,22 @@ install -p -m 0755 rhel/etc_sysconfig_network-scripts_ifdown-ovs \
 install -p -m 0755 rhel/etc_sysconfig_network-scripts_ifup-ovs \
         $RPM_BUILD_ROOT/%{_sysconfdir}/sysconfig/network-scripts/ifup-ovs
 
-install -d -m 0755 $RPM_BUILD_ROOT%{python2_sitelib}
-install -d -m 0755 $RPM_BUILD_ROOT%{python3_sitelib}
-cp -a $RPM_BUILD_ROOT/%{_datadir}/openvswitch/python/* \
-   $RPM_BUILD_ROOT%{python2_sitelib}
-cp -a $RPM_BUILD_ROOT/%{_datadir}/openvswitch/python/ovs \
-   $RPM_BUILD_ROOT%{python3_sitelib}
+install -d -m 0755 $RPM_BUILD_ROOT%{python_sitelib}
+cp -a $RPM_BUILD_ROOT/%{_datadir}/openvswitch/python/ovstest \
+        $RPM_BUILD_ROOT%{python_sitelib}
+
+# Build the JSON C extension for the Python lib (#1417738)
+pushd python
+CPPFLAGS="-I ../include" \
+LDFLAGS="${RPM_LD_FLAGS} -L $RPM_BUILD_ROOT%{_libdir}" \
+        %py2_build
+%py2_install
+CPPFLAGS="-I ../include" \
+LDFLAGS="${RPM_LD_FLAGS} -L $RPM_BUILD_ROOT%{_libdir}" \
+        %py3_build
+%py3_install
+popd
+
 rm -rf $RPM_BUILD_ROOT/%{_datadir}/openvswitch/python/
 
 install -d -m 0755 $RPM_BUILD_ROOT/%{_sharedstatedir}/openvswitch
@@ -485,11 +494,13 @@ chown -R openvswitch:openvswitch /etc/openvswitch
 
 
 %files -n python2-openvswitch
-%{python2_sitelib}/ovs
+%{python2_sitearch}/ovs
+%{python2_sitearch}/ovs-*.egg-info
 %doc COPYING
 
 %files -n python3-openvswitch
-%{python3_sitelib}/ovs
+%{python3_sitearch}/ovs
+%{python3_sitearch}/ovs-*.egg-info
 %doc COPYING
 
 %files test
@@ -508,12 +519,12 @@ chown -R openvswitch:openvswitch /etc/openvswitch
 %{python2_sitelib}/ovstest
 
 %files devel
-%{_libdir}/*.a
-%{_libdir}/*.la
+%{_libdir}/*.so
 %{_libdir}/pkgconfig/*.pc
 %{_includedir}/openvswitch/*
 %{_includedir}/openflow/*
 %{_includedir}/ovn/*
+%exclude %{_libdir}/*.la
 
 %files
 %defattr(-,openvswitch,openvswitch)
@@ -523,7 +534,7 @@ chown -R openvswitch:openvswitch /etc/openvswitch
 %ghost %attr(0600,-,-) %verify(not owner group md5 size mtime) %{_sysconfdir}/openvswitch/.conf.db.~lock~
 %config %ghost %{_sysconfdir}/openvswitch/system-id.conf
 %defattr(-,root,root)
-%config(noreplace) %{_sysconfdir}/sysconfig/openvswitch
+%config(noreplace) %verify(not md5 size mtime) %{_sysconfdir}/sysconfig/openvswitch
 %{_sysconfdir}/bash_completion.d/ovs-appctl-bashcomp.bash
 %{_sysconfdir}/bash_completion.d/ovs-vsctl-bashcomp.bash
 %config(noreplace) %{_sysconfdir}/logrotate.d/openvswitch
@@ -553,6 +564,7 @@ chown -R openvswitch:openvswitch /etc/openvswitch
 %{_bindir}/ovsdb-tool
 %{_bindir}/ovs-pki
 %{_bindir}/vtep-ctl
+%{_libdir}/*.so.*
 %{_sbindir}/ovs-bugtool
 %{_sbindir}/ovs-vswitchd
 %{_sbindir}/ovsdb-server
@@ -580,7 +592,7 @@ chown -R openvswitch:openvswitch /etc/openvswitch
 %{_udevrulesdir}/91-vfio.rules
 %doc COPYING NOTICE README.rst NEWS rhel/README.RHEL.rst
 /var/lib/openvswitch
-%attr(755,-,-) /var/log/openvswitch
+%attr(750,openvswitch,openvswitch) /var/log/openvswitch
 %ghost %attr(755,root,root) %verify(not owner group) %{_rundir}/openvswitch
 
 %if %{with ovn_docker}
@@ -629,6 +641,14 @@ chown -R openvswitch:openvswitch /etc/openvswitch
 %{_unitdir}/ovn-controller-vtep.service
 
 %changelog
+* Wed Aug 01 2018 Timothy Redaelli <tredaelli@redhat.com> - 2.9.2-3
+- Build OVS as shared library
+- Build the C json native extension for Python (60x faster)
+- Fix TPS VerifyTest (rpm -V) by do not verify md5, size and mtime of
+  /etc/sysconfig/openvswitch
+- Backport spec file modfications from "rhel: Use openvswitch user/group for
+  the log directory"
+
 * Fri Jul 13 2018 Fedora Release Engineering <releng@fedoraproject.org> - 2.9.2-2
 - Rebuilt for https://fedoraproject.org/wiki/Fedora_29_Mass_Rebuild
 
