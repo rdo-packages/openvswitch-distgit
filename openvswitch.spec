@@ -136,6 +136,9 @@ BuildRequires: libcap-ng libcap-ng-devel
 %if %{with dpdk}
 %ifarch %{dpdkarches}
 BuildRequires: dpdk-devel libpcap-devel numactl-devel
+# FIXME check MLX patches to avoid runtime dependencies on rdma-core
+# in Extras dpdk RPM
+BuildRequires: libibverbs
 %endif
 %endif
 
