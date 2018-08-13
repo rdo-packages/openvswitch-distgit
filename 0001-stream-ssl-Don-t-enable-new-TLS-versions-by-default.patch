@@ -1,0 +1,40 @@
+From a6869520061696cb115afb7de0021556068d1134 Mon Sep 17 00:00:00 2001
+From: Timothy Redaelli <tredaelli@redhat.com>
+Date: Fri, 27 Jul 2018 16:29:40 +0200
+Subject: [PATCH 1/2] stream-ssl: Don't enable new TLS versions by default
+
+Currently protocol_flags is populated by the list of SSL and TLS
+protocols by hand. This means that when a new TLS version is added to
+openssl (in this case TLS v1.3 is added to openssl 1.1.1 beta)
+ovsdb-server automatically enable support to it with the default ciphers.
+This can be a security problem (since other ciphers can be enabled) and it
+also makes a test (SSL db: implementation) to fail.
+
+This commit changes the 'protocol_flags' to use the list of all protocol
+flags as provided by openssl library (SSL_OP_NO_SSL_MASK) so there is no
+need to keep the list updated by hand.
+
+Signed-off-by: Timothy Redaelli <tredaelli@redhat.com>
+Signed-off-by: Ben Pfaff <blp@ovn.org>
+(cherry picked from commit ab16d2c2871b82d1f71c652657791acd9ca51161)
+---
+ lib/stream-ssl.c | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/lib/stream-ssl.c b/lib/stream-ssl.c
+index 278468083..95b0f106e 100644
+--- a/lib/stream-ssl.c
++++ b/lib/stream-ssl.c
+@@ -1186,8 +1186,7 @@ stream_ssl_set_protocols(const char *arg)
+     }
+ 
+     /* Start with all the flags off and turn them on as requested. */
+-    long protocol_flags = SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_TLSv1;
+-    protocol_flags |= SSL_OP_NO_TLSv1_1 | SSL_OP_NO_TLSv1_2;
++    long protocol_flags = SSL_OP_NO_SSL_MASK;
+ 
+     char *s = xstrdup(arg);
+     char *save_ptr = NULL;
+-- 
+2.17.1
+

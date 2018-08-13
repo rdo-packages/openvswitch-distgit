@@ -40,7 +40,7 @@ Name: openvswitch
 Summary: Open vSwitch daemon/database/utilities
 URL: http://www.openvswitch.org/
 Version: 2.9.2
-Release: 4%{?commit0:.%{date}git%{shortcommit0}}%{?dist}
+Release: 5%{?commit0:.%{date}git%{shortcommit0}}%{?dist}
 
 # Nearly all of openvswitch is ASL 2.0.  The bugtool is LGPLv2+, and the
 # lib/sflow*.[ch] files are SISSL
@@ -71,6 +71,9 @@ Patch41: 0002-netdev-tc-offloads-Add-support-for-IP-fragmentation.patch
 Patch42: 0001-lib-netdev-tc-offloads-Fix-frag-first-later-translat.patch
 Patch43: 0002-lib-tc-Fix-sparse-warnings.patch
 
+# Don't enable new TLS versions by default (needed since OpenSSL 1.1.1)
+Patch310: 0001-stream-ssl-Don-t-enable-new-TLS-versions-by-default.patch
+Patch311: 0002-stream-ssl-Define-SSL_OP_NO_SSL_MASK-for-OpenSSL-ver.patch
 
 BuildRequires: gcc-c++
 BuildRequires: gcc
@@ -290,9 +293,9 @@ install -p -m 0755 rhel/etc_sysconfig_network-scripts_ifdown-ovs \
 install -p -m 0755 rhel/etc_sysconfig_network-scripts_ifup-ovs \
         $RPM_BUILD_ROOT/%{_sysconfdir}/sysconfig/network-scripts/ifup-ovs
 
-install -d -m 0755 $RPM_BUILD_ROOT%{python_sitelib}
+install -d -m 0755 $RPM_BUILD_ROOT%{python2_sitelib}
 cp -a $RPM_BUILD_ROOT/%{_datadir}/openvswitch/python/ovstest \
-        $RPM_BUILD_ROOT%{python_sitelib}
+        $RPM_BUILD_ROOT%{python2_sitelib}
 
 # Build the JSON C extension for the Python lib (#1417738)
 pushd python
@@ -653,6 +656,9 @@ chown -R openvswitch:openvswitch /etc/openvswitch
 %{_unitdir}/ovn-controller-vtep.service
 
 %changelog
+* Mon Aug 13 2018 Timothy Redaelli <tredaelli@redhat.com> - 2.9.2-5
+- Backport "Don't enable new TLS versions by default"
+
 * Mon Aug 06 2018 Lubomir Rintel <lkundrak@v3.sk> - 2.9.2-4
 - Split out the network-scripts
 

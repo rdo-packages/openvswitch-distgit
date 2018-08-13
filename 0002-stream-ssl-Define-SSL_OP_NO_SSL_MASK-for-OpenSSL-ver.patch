@@ -1,0 +1,40 @@
+From 74f34a896ddaebce7eba66022be8868dd3b44d0a Mon Sep 17 00:00:00 2001
+From: Ben Pfaff <blp@ovn.org>
+Date: Mon, 6 Aug 2018 15:39:44 -0700
+Subject: [PATCH 2/2] stream-ssl: Define SSL_OP_NO_SSL_MASK for OpenSSL
+ versions that lack it.
+
+10 of the travis builds are failing such as
+TESTSUITE=1 KERNEL=3.16.54 for gcc and clang.
+
+Fixes: ab16d2c2871b ("stream-ssl: Don't enable new TLS versions by default")
+CC: Timothy Redaelli <tredaelli@redhat.com>
+Signed-off-by: Darrell Ball <dlu998@gmail.com>
+Signed-off-by: Ben Pfaff <blp@ovn.org>
+Acked-by: Han Zhou <hzhou8@ebay.com>
+Acked-by: Darrell Ball <dlu998@gmail.com>
+(cherry picked from commit ce679280889f0eb4ebc95b62558a20a7a5f7c0fb)
+---
+ lib/stream-ssl.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/lib/stream-ssl.c b/lib/stream-ssl.c
+index 95b0f106e..c64bb8f19 100644
+--- a/lib/stream-ssl.c
++++ b/lib/stream-ssl.c
+@@ -1186,6 +1186,12 @@ stream_ssl_set_protocols(const char *arg)
+     }
+ 
+     /* Start with all the flags off and turn them on as requested. */
++#ifndef SSL_OP_NO_SSL_MASK
++    /* For old OpenSSL without this macro, this is the correct value.  */
++#define SSL_OP_NO_SSL_MASK (SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | \
++                            SSL_OP_NO_TLSv1 | SSL_OP_NO_TLSv1_1 | \
++                            SSL_OP_NO_TLSv1_2)
++#endif
+     long protocol_flags = SSL_OP_NO_SSL_MASK;
+ 
+     char *s = xstrdup(arg);
+-- 
+2.17.1
+
