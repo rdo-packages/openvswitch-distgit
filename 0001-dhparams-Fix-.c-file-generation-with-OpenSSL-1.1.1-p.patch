@@ -1,0 +1,38 @@
+From 44343cb1ca4232f23dba24cab98d3605686f5700 Mon Sep 17 00:00:00 2001
+From: Timothy Redaelli <tredaelli@redhat.com>
+Date: Fri, 7 Sep 2018 15:14:53 +0200
+Subject: [PATCH] dhparams: Fix .c file generation with OpenSSL >= 1.1.1-pre9
+
+Since OpenSSL upstream commit 201b305a2409
+("apps/dsaparam.c generates code that is intended to be pasted or included into
+an existing source file: the function is static, and the code doesn't include
+dsa.h.  Match the generated C source style of dsaparam.") "openssl dhparam -C"
+generates the get_dh functions as static, but the functions are used inside
+stream-ssl.c and so the static keyword cannot be used.
+
+This commit removes the static keyword from the get_dh functions during
+dhparams.c file generation by restoring the current behaviour.
+
+Signed-off-by: Timothy Redaelli <tredaelli@redhat.com>
+Signed-off-by: Ben Pfaff <blp@ovn.org>
+(cherry picked from commit dc041eae5019a936618c398a2a1d106f65604ccc)
+---
+ lib/automake.mk | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/automake.mk b/lib/automake.mk
+index 8ecad1241..70461ec8c 100644
+--- a/lib/automake.mk
++++ b/lib/automake.mk
+@@ -438,7 +438,7 @@ lib/dhparams.c: lib/dh1024.pem lib/dh2048.pem lib/dh4096.pem
+ 	 openssl dhparam -C -in $(srcdir)/lib/dh1024.pem -noout &&	\
+ 	 openssl dhparam -C -in $(srcdir)/lib/dh2048.pem -noout &&	\
+ 	 openssl dhparam -C -in $(srcdir)/lib/dh4096.pem -noout)	\
+-	| sed 's/\(get_dh[0-9]*\)()/\1(void)/' > lib/dhparams.c.tmp &&  \
++	| sed 's/^static DH/DH/; s/\(get_dh[0-9]*\)()/\1(void)/' > lib/dhparams.c.tmp &&  \
+ 	mv lib/dhparams.c.tmp lib/dhparams.c
+ else
+ lib_libopenvswitch_la_SOURCES += lib/stream-nossl.c
+-- 
+2.17.1
+

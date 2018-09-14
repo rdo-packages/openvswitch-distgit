@@ -40,7 +40,7 @@ Name: openvswitch
 Summary: Open vSwitch daemon/database/utilities
 URL: http://www.openvswitch.org/
 Version: 2.9.2
-Release: 5%{?commit0:.%{date}git%{shortcommit0}}%{?dist}
+Release: 6%{?commit0:.%{date}git%{shortcommit0}}%{?dist}
 
 # Nearly all of openvswitch is ASL 2.0.  The bugtool is LGPLv2+, and the
 # lib/sflow*.[ch] files are SISSL
@@ -71,9 +71,14 @@ Patch41: 0002-netdev-tc-offloads-Add-support-for-IP-fragmentation.patch
 Patch42: 0001-lib-netdev-tc-offloads-Fix-frag-first-later-translat.patch
 Patch43: 0002-lib-tc-Fix-sparse-warnings.patch
 
+Patch50: 0001-Add-ovs.compat-module-to-python-package.patch
+
+
 # Don't enable new TLS versions by default (needed since OpenSSL 1.1.1)
 Patch310: 0001-stream-ssl-Don-t-enable-new-TLS-versions-by-default.patch
 Patch311: 0002-stream-ssl-Define-SSL_OP_NO_SSL_MASK-for-OpenSSL-ver.patch
+
+Patch315: 0001-dhparams-Fix-.c-file-generation-with-OpenSSL-1.1.1-p.patch
 
 BuildRequires: gcc-c++
 BuildRequires: gcc
@@ -656,6 +661,10 @@ chown -R openvswitch:openvswitch /etc/openvswitch
 %{_unitdir}/ovn-controller-vtep.service
 
 %changelog
+* Fri Sep 14 2018 Timothy Redaelli <tredaelli@redhat.com> - 2.9.2-6
+- Backport "Add ovs.compat module to python package" (#1619712)
+- Backport a variant of "dhparams: Fix .c file generation with OpenSSL >= 1.1.1-pre9"
+
 * Mon Aug 13 2018 Timothy Redaelli <tredaelli@redhat.com> - 2.9.2-5
 - Backport "Don't enable new TLS versions by default"
 

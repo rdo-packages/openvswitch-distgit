@@ -1,0 +1,31 @@
+From f18adea51cac4f40c50d59d7c001264a8ce83cb3 Mon Sep 17 00:00:00 2001
+From: Terry Wilson <twilson@redhat.com>
+Date: Fri, 31 Aug 2018 13:40:54 -0500
+Subject: [PATCH] Add ovs.compat module to python package
+
+Signed-off-by: Terry Wilson <twilson@redhat.com>
+Signed-off-by: Ben Pfaff <blp@ovn.org>
+Acked-by: Timothy Redaelli <tredaelli@redhat.com>
+(cherry picked from commit 2360464d629de3acacabd960ffc02fbb5081028d)
+Signed-off-by: Ben Pfaff <blp@ovn.org>
+---
+ python/setup.py | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/python/setup.py b/python/setup.py
+index 0e86834ea..b52657df3 100644
+--- a/python/setup.py
++++ b/python/setup.py
+@@ -63,7 +63,8 @@ setup_args = dict(
+     url='http://www.openvswitch.org/',
+     author='Open vSwitch',
+     author_email='dev@openvswitch.org',
+-    packages=['ovs', 'ovs.db', 'ovs.unixctl'],
++    packages=['ovs', 'ovs.compat', 'ovs.compat.sortedcontainers',
++              'ovs.db', 'ovs.unixctl'],
+     keywords=['openvswitch', 'ovs', 'OVSDB'],
+     license='Apache 2.0',
+     classifiers=[
+-- 
+2.17.1
+
