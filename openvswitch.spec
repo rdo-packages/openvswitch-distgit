@@ -39,8 +39,8 @@
 Name: openvswitch
 Summary: Open vSwitch daemon/database/utilities
 URL: http://www.openvswitch.org/
-Version: 2.9.2
-Release: 6%{?commit0:.%{date}git%{shortcommit0}}%{?dist}
+Version: 2.10.0
+Release: 1%{?commit0:.%{date}git%{shortcommit0}}%{?dist}
 
 # Nearly all of openvswitch is ASL 2.0.  The bugtool is LGPLv2+, and the
 # lib/sflow*.[ch] files are SISSL
@@ -64,21 +64,23 @@ ExclusiveArch: x86_64 aarch64 ppc64le s390x
 # ovs-patches
 
 # OVS (including OVN) backports (0 - 300)
-Patch0:  ovs-dev-ofproto-macros-Ignore-Dropped-log-messages-in-check_logs..patch
-Patch10: 0001-ofproto-dpif-Delete-system-tunnel-interface-when-rem.patch
 
-Patch41: 0002-netdev-tc-offloads-Add-support-for-IP-fragmentation.patch
-Patch42: 0001-lib-netdev-tc-offloads-Fix-frag-first-later-translat.patch
-Patch43: 0002-lib-tc-Fix-sparse-warnings.patch
+Patch010: ofproto-dpif-xlate_Fix_translation_of_groups_with_no_bu.patch
 
-Patch50: 0001-Add-ovs.compat-module-to-python-package.patch
+Patch020: 0001-ovs-save-Don-t-always-include-the-default-flow-durin.patch
 
+# Bug 1631797
+Patch030: 0001-dpif-netdev-Add-round-robin-based-rxq-to-pmd-assignm.patch
 
-# Don't enable new TLS versions by default (needed since OpenSSL 1.1.1)
-Patch310: 0001-stream-ssl-Don-t-enable-new-TLS-versions-by-default.patch
-Patch311: 0002-stream-ssl-Define-SSL_OP_NO_SSL_MASK-for-OpenSSL-ver.patch
+# Bug 1565205
+Patch040: 0001-dpif-netdev-Avoid-reordering-of-packets-in-a-batch-w.patch
 
-Patch315: 0001-dhparams-Fix-.c-file-generation-with-OpenSSL-1.1.1-p.patch
+# Bug 1634015
+Patch050: 0001-dpif-netlink-don-t-allocate-per-thread-netlink-socke.patch
+Patch051: 0001-dpif-Remove-support-for-multiple-queues-per-port.patch
+
+# Bug 1635344
+Patch070: 0001-OVN-add-CT_LB-action-to-ovn-trace.patch
 
 BuildRequires: gcc-c++
 BuildRequires: gcc
@@ -89,6 +91,7 @@ BuildRequires: python2-devel python2-six
 BuildRequires: python3-devel python3-six
 BuildRequires: desktop-file-utils
 BuildRequires: groff-base graphviz
+BuildRequires: unbound-devel
 # make check dependencies
 BuildRequires: procps-ng
 BuildRequires: python2-pyOpenSSL
@@ -114,6 +117,8 @@ Requires: openssl iproute module-init-tools
 
 Requires(pre): shadow-utils
 Requires(post): /bin/sed
+Requires(post): /usr/sbin/usermod
+Requires(post): /usr/sbin/groupadd
 Requires(post): systemd-units
 Requires(preun): systemd-units
 Requires(postun): systemd-units
@@ -572,6 +577,7 @@ chown -R openvswitch:openvswitch /etc/openvswitch
 %{_datadir}/openvswitch/scripts/ovs-save
 %{_datadir}/openvswitch/scripts/ovs-vtep
 %{_datadir}/openvswitch/scripts/ovs-ctl
+%{_datadir}/openvswitch/scripts/ovs-kmod-ctl
 %{_datadir}/openvswitch/scripts/ovs-systemd-reload
 %config %{_datadir}/openvswitch/vswitch.ovsschema
 %config %{_datadir}/openvswitch/vtep.ovsschema
@@ -604,13 +610,14 @@ chown -R openvswitch:openvswitch /etc/openvswitch
 %{_mandir}/man8/ovs-ctl.8*
 %{_mandir}/man8/ovs-dpctl.8*
 %{_mandir}/man8/ovs-dpctl-top.8*
+%{_mandir}/man8/ovs-kmod-ctl.8.*
 %{_mandir}/man8/ovs-ofctl.8*
 %{_mandir}/man8/ovs-pki.8*
 %{_mandir}/man8/ovs-vsctl.8*
 %{_mandir}/man8/ovs-vswitchd.8*
 %{_mandir}/man8/ovs-parse-backtrace.8*
 %{_udevrulesdir}/91-vfio.rules
-%doc COPYING NOTICE README.rst NEWS rhel/README.RHEL.rst
+%doc LICENSE NOTICE README.rst NEWS rhel/README.RHEL.rst
 /var/lib/openvswitch
 %attr(750,openvswitch,openvswitch) /var/log/openvswitch
 %ghost %attr(755,root,root) %verify(not owner group) %{_rundir}/openvswitch
@@ -661,6 +668,9 @@ chown -R openvswitch:openvswitch /etc/openvswitch
 %{_unitdir}/ovn-controller-vtep.service
 
 %changelog
+* Fri Oct 05 2018 Timothy Redaelli <tredaelli@redhat.com> - 2.10.0-1
+- Align with "Fast Datapath" 2.10.0-10 (#1633555)
+
 * Fri Sep 14 2018 Timothy Redaelli <tredaelli@redhat.com> - 2.9.2-6
 - Backport "Add ovs.compat module to python package" (#1619712)
 - Backport a variant of "dhparams: Fix .c file generation with OpenSSL >= 1.1.1-pre9"

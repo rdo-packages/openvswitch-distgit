@@ -1,0 +1,41 @@
+Date: Sun,  2 Sep 2018 09:30:43 -0700
+From: Ben Pfaff <blp@ovn.org>
+To: dev@openvswitch.org
+Cc: Ben Pfaff <blp@ovn.org>
+Subject: [ovs-dev] [PATCH] ofproto-dpif-xlate: Fix translation of groups with
+ no buckets.
+Message-Id: <20180902163043.11210-1-blp@ovn.org>
+List-Id: <ovs-dev.openvswitch.org>
+X-Bogosity: Unsure, tests=bogofilter, spamicity=0.500000, version=1.2.4
+
+A group can have no buckets, in which case ovs_list_back() assert-fails.
+This fixes the problem.
+
+Found by OFTest.
+
+Fixes: a04e58881e25 ("ofproto-dpif-xlate: Simplify translation for groups.")
+Signed-off-by: Ben Pfaff <blp@ovn.org>
+---
+ ofproto/ofproto-dpif-xlate.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/ofproto/ofproto-dpif-xlate.c b/ofproto/ofproto-dpif-xlate.c
+index e26f6c8f554a..507e14dd0d00 100644
+--- a/ofproto/ofproto-dpif-xlate.c
++++ b/ofproto/ofproto-dpif-xlate.c
+@@ -4488,7 +4488,7 @@ xlate_group_action__(struct xlate_ctx *ctx, struct group_dpif *group,
+                      bool is_last_action)
+ {
+     if (group->up.type == OFPGT11_ALL || group->up.type == OFPGT11_INDIRECT) {
+-        struct ovs_list *last_bucket = ovs_list_back(&group->up.buckets);
++        struct ovs_list *last_bucket = group->up.buckets.prev;
+         struct ofputil_bucket *bucket;
+         LIST_FOR_EACH (bucket, list_node, &group->up.buckets) {
+             bool is_last_bucket = &bucket->list_node == last_bucket;
+-- 
+2.16.1
+
+_______________________________________________
+dev mailing list
+dev@openvswitch.org
+https://mail.openvswitch.org/mailman/listinfo/ovs-dev

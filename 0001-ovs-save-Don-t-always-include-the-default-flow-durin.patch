@@ -1,0 +1,38 @@
+From 949758946767ff79b4c3eb5eca755c6cf21643e3 Mon Sep 17 00:00:00 2001
+From: Timothy Redaelli <tredaelli@redhat.com>
+Date: Sun, 9 Sep 2018 14:20:02 +0200
+Subject: [PATCH] ovs-save: Don't always include the default flow during
+ restore
+
+Currently the default flow (actions=NORMAL) is present in the flow table after
+the flow table is restored also when the default flow is removed.
+
+This commit changes the behaviour of the "ovs-save save-flows" command to use
+"replace-flows" instead of "add-flows" to restore the flows. This is needed in
+order to always have the new flow table as it was before restoring it.
+
+Reported-by: Flavio Leitner <fbl@sysclose.org>
+Reported-at: https://bugzilla.redhat.com/show_bug.cgi?id=1626096
+Signed-off-by: Timothy Redaelli <tredaelli@redhat.com>
+Acked-by: Flavio Leitner <fbl@sysclose.org>
+Signed-off-by: Gurucharan Shetty <guru@ovn.org>
+---
+ utilities/ovs-save | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/utilities/ovs-save b/utilities/ovs-save
+index ea8fb6a45..2294583d6 100755
+--- a/utilities/ovs-save
++++ b/utilities/ovs-save
+@@ -121,7 +121,7 @@ save_flows () {
+              cnt++;printf "{class="$1",type="$2",len="$3"}->"$4}'
+         echo "'"
+ 
+-        printf "%s" "ovs-ofctl -O $ofp_version add-flows ${bridge} " \
++        printf "%s" "ovs-ofctl -O $ofp_version replace-flows ${bridge} " \
+             "\"$workdir/$bridge.flows.dump\""
+ 
+         # If possible, use OpenFlow 1.4 atomic bundle transaction to add flows
+-- 
+2.17.1
+

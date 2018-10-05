@@ -1,0 +1,228 @@
+From 769b50349f28c5f9e4bff102bc61dadcb9b99c37 Mon Sep 17 00:00:00 2001
+From: Ben Pfaff <blp@ovn.org>
+Date: Tue, 25 Sep 2018 15:14:13 -0700
+Subject: [PATCH] dpif: Remove support for multiple queues per port.
+
+Commit 69c51582ff78 ("dpif-netlink: don't allocate per thread netlink
+sockets") removed dpif-netlink support for multiple queues per port.
+No remaining dpif provider supports multiple queues per port, so
+remove infrastructure for the feature.
+
+CC: Matteo Croce <mcroce@redhat.com>
+Signed-off-by: Ben Pfaff <blp@ovn.org>
+Tested-by: Yifeng Sun <pkusunyifeng@gmail.com>
+Reviewed-by: Yifeng Sun <pkusunyifeng@gmail.com>
+---
+ lib/dpif-netlink.c            |  9 ++++-----
+ lib/dpif-provider.h           | 14 ++------------
+ lib/dpif.c                    | 15 +++------------
+ lib/dpif.h                    | 15 +--------------
+ ofproto/ofproto-dpif-upcall.c |  7 +++----
+ ofproto/ofproto-dpif-xlate.c  |  6 ++----
+ 6 files changed, 15 insertions(+), 51 deletions(-)
+
+diff --git a/lib/dpif-netlink.c b/lib/dpif-netlink.c
+index 4736d21d4..21315033c 100644
+--- a/lib/dpif-netlink.c
++++ b/lib/dpif-netlink.c
+@@ -234,7 +234,7 @@ static bool ovs_tunnels_out_of_tree = true;
+ static int dpif_netlink_init(void);
+ static int open_dpif(const struct dpif_netlink_dp *, struct dpif **);
+ static uint32_t dpif_netlink_port_get_pid(const struct dpif *,
+-                                          odp_port_t port_no, uint32_t hash);
++                                          odp_port_t port_no);
+ static void dpif_netlink_handler_uninit(struct dpif_handler *handler);
+ static int dpif_netlink_refresh_channels(struct dpif_netlink *,
+                                          uint32_t n_handlers);
+@@ -991,7 +991,7 @@ dpif_netlink_port_query_by_name(const struct dpif *dpif_, const char *devname,
+ 
+ static uint32_t
+ dpif_netlink_port_get_pid__(const struct dpif_netlink *dpif,
+-                            odp_port_t port_no, uint32_t hash OVS_UNUSED)
++                            odp_port_t port_no)
+     OVS_REQ_RDLOCK(dpif->upcall_lock)
+ {
+     uint32_t port_idx = odp_to_u32(port_no);
+@@ -1015,14 +1015,13 @@ dpif_netlink_port_get_pid__(const struct dpif_netlink *dpif,
+ }
+ 
+ static uint32_t
+-dpif_netlink_port_get_pid(const struct dpif *dpif_, odp_port_t port_no,
+-                          uint32_t hash)
++dpif_netlink_port_get_pid(const struct dpif *dpif_, odp_port_t port_no)
+ {
+     const struct dpif_netlink *dpif = dpif_netlink_cast(dpif_);
+     uint32_t ret;
+ 
+     fat_rwlock_rdlock(&dpif->upcall_lock);
+-    ret = dpif_netlink_port_get_pid__(dpif, port_no, hash);
++    ret = dpif_netlink_port_get_pid__(dpif, port_no);
+     fat_rwlock_unlock(&dpif->upcall_lock);
+ 
+     return ret;
+diff --git a/lib/dpif-provider.h b/lib/dpif-provider.h
+index debdafc42..eb3ee50a6 100644
+--- a/lib/dpif-provider.h
++++ b/lib/dpif-provider.h
+@@ -191,16 +191,7 @@ struct dpif_class {
+ 
+     /* Returns the Netlink PID value to supply in OVS_ACTION_ATTR_USERSPACE
+      * actions as the OVS_USERSPACE_ATTR_PID attribute's value, for use in
+-     * flows whose packets arrived on port 'port_no'.  In the case where the
+-     * provider allocates multiple Netlink PIDs to a single port, it may use
+-     * 'hash' to spread load among them.  The caller need not use a particular
+-     * hash function; a 5-tuple hash is suitable.
+-     *
+-     * (The datapath implementation might use some different hash function for
+-     * distributing packets received via flow misses among PIDs.  This means
+-     * that packets received via flow misses might be reordered relative to
+-     * packets received via userspace actions.  This is not ordinarily a
+-     * problem.)
++     * flows whose packets arrived on port 'port_no'.
+      *
+      * A 'port_no' of UINT32_MAX should be treated as a special case.  The
+      * implementation should return a reserved PID, not allocated to any port,
+@@ -212,8 +203,7 @@ struct dpif_class {
+      *
+      * A dpif provider that doesn't have meaningful Netlink PIDs can use NULL
+      * for this function.  This is equivalent to always returning 0. */
+-    uint32_t (*port_get_pid)(const struct dpif *dpif, odp_port_t port_no,
+-                             uint32_t hash);
++    uint32_t (*port_get_pid)(const struct dpif *dpif, odp_port_t port_no);
+ 
+     /* Attempts to begin dumping the ports in a dpif.  On success, returns 0
+      * and initializes '*statep' with any data needed for iteration.  On
+diff --git a/lib/dpif.c b/lib/dpif.c
+index 85cf9000e..4697a4dcd 100644
+--- a/lib/dpif.c
++++ b/lib/dpif.c
+@@ -737,16 +737,7 @@ dpif_port_query_by_name(const struct dpif *dpif, const char *devname,
+ 
+ /* Returns the Netlink PID value to supply in OVS_ACTION_ATTR_USERSPACE
+  * actions as the OVS_USERSPACE_ATTR_PID attribute's value, for use in
+- * flows whose packets arrived on port 'port_no'.  In the case where the
+- * provider allocates multiple Netlink PIDs to a single port, it may use
+- * 'hash' to spread load among them.  The caller need not use a particular
+- * hash function; a 5-tuple hash is suitable.
+- *
+- * (The datapath implementation might use some different hash function for
+- * distributing packets received via flow misses among PIDs.  This means
+- * that packets received via flow misses might be reordered relative to
+- * packets received via userspace actions.  This is not ordinarily a
+- * problem.)
++ * flows whose packets arrived on port 'port_no'.
+  *
+  * A 'port_no' of ODPP_NONE is a special case: it returns a reserved PID, not
+  * allocated to any port, that the client may use for special purposes.
+@@ -757,10 +748,10 @@ dpif_port_query_by_name(const struct dpif *dpif, const char *devname,
+  * update all of the flows that it installed that contain
+  * OVS_ACTION_ATTR_USERSPACE actions. */
+ uint32_t
+-dpif_port_get_pid(const struct dpif *dpif, odp_port_t port_no, uint32_t hash)
++dpif_port_get_pid(const struct dpif *dpif, odp_port_t port_no)
+ {
+     return (dpif->dpif_class->port_get_pid
+-            ? (dpif->dpif_class->port_get_pid)(dpif, port_no, hash)
++            ? (dpif->dpif_class->port_get_pid)(dpif, port_no)
+             : 0);
+ }
+ 
+diff --git a/lib/dpif.h b/lib/dpif.h
+index 8fdfe5f00..1a35cc410 100644
+--- a/lib/dpif.h
++++ b/lib/dpif.h
+@@ -274,18 +274,6 @@
+  *
+  *    - Upcalls that specify the "special" Netlink PID are queued separately.
+  *
+- * Multiple threads may want to read upcalls simultaneously from a single
+- * datapath.  To support multiple threads well, one extends the above preferred
+- * behavior:
+- *
+- *    - Each port has multiple PIDs.  The datapath distributes "miss" upcalls
+- *      across the PIDs, ensuring that a given flow is mapped in a stable way
+- *      to a single PID.
+- *
+- *    - For "action" upcalls, the thread can specify its own Netlink PID or
+- *      other threads' Netlink PID of the same port for offloading purpose
+- *      (e.g. in a "round robin" manner).
+- *
+  *
+  * Packet Format
+  * =============
+@@ -470,8 +458,7 @@ int dpif_port_query_by_name(const struct dpif *, const char *devname,
+                             struct dpif_port *);
+ int dpif_port_get_name(struct dpif *, odp_port_t port_no,
+                        char *name, size_t name_size);
+-uint32_t dpif_port_get_pid(const struct dpif *, odp_port_t port_no,
+-                           uint32_t hash);
++uint32_t dpif_port_get_pid(const struct dpif *, odp_port_t port_no);
+ 
+ struct dpif_port_dump {
+     const struct dpif *dpif;
+diff --git a/ofproto/ofproto-dpif-upcall.c b/ofproto/ofproto-dpif-upcall.c
+index 62222079f..0cc964a7f 100644
+--- a/ofproto/ofproto-dpif-upcall.c
++++ b/ofproto/ofproto-dpif-upcall.c
+@@ -1021,7 +1021,6 @@ classify_upcall(enum dpif_upcall_type type, const struct nlattr *userdata,
+  * initialized with at least 128 bytes of space. */
+ static void
+ compose_slow_path(struct udpif *udpif, struct xlate_out *xout,
+-                  const struct flow *flow,
+                   odp_port_t odp_in_port, ofp_port_t ofp_in_port,
+                   struct ofpbuf *buf, uint32_t meter_id,
+                   struct uuid *ofproto_uuid)
+@@ -1038,7 +1037,7 @@ compose_slow_path(struct udpif *udpif, struct xlate_out *xout,
+     port = xout->slow & (SLOW_CFM | SLOW_BFD | SLOW_LACP | SLOW_STP)
+         ? ODPP_NONE
+         : odp_in_port;
+-    pid = dpif_port_get_pid(udpif->dpif, port, flow_hash_5tuple(flow, 0));
++    pid = dpif_port_get_pid(udpif->dpif, port);
+ 
+     size_t offset;
+     size_t ac_offset;
+@@ -1196,7 +1195,7 @@ upcall_xlate(struct udpif *udpif, struct upcall *upcall,
+                          odp_actions->data, odp_actions->size);
+     } else {
+         /* upcall->put_actions already initialized by upcall_receive(). */
+-        compose_slow_path(udpif, &upcall->xout, upcall->flow,
++        compose_slow_path(udpif, &upcall->xout,
+                           upcall->flow->in_port.odp_port, upcall->ofp_in_port,
+                           &upcall->put_actions,
+                           upcall->ofproto->up.slowpath_meter_id,
+@@ -2155,7 +2154,7 @@ revalidate_ukey__(struct udpif *udpif, const struct udpif_key *ukey,
+             goto exit;
+         }
+ 
+-        compose_slow_path(udpif, xoutp, &ctx.flow, ctx.flow.in_port.odp_port,
++        compose_slow_path(udpif, xoutp, ctx.flow.in_port.odp_port,
+                           ofp_in_port, odp_actions,
+                           ofproto->up.slowpath_meter_id, &ofproto->uuid);
+     }
+diff --git a/ofproto/ofproto-dpif-xlate.c b/ofproto/ofproto-dpif-xlate.c
+index 6949595ba..f11f60468 100644
+--- a/ofproto/ofproto-dpif-xlate.c
++++ b/ofproto/ofproto-dpif-xlate.c
+@@ -3084,8 +3084,7 @@ compose_sample_action(struct xlate_ctx *ctx,
+ 
+     odp_port_t odp_port = ofp_port_to_odp_port(
+         ctx->xbridge, ctx->xin->flow.in_port.ofp_port);
+-    uint32_t pid = dpif_port_get_pid(ctx->xbridge->dpif, odp_port,
+-                                     flow_hash_5tuple(&ctx->xin->flow, 0));
++    uint32_t pid = dpif_port_get_pid(ctx->xbridge->dpif, odp_port);
+     size_t cookie_offset = odp_put_userspace_action(pid, cookie,
+                                                     sizeof *cookie,
+                                                     tunnel_out_port,
+@@ -4638,8 +4637,7 @@ put_controller_user_action(struct xlate_ctx *ctx,
+ 
+     odp_port_t odp_port = ofp_port_to_odp_port(ctx->xbridge,
+                                              ctx->xin->flow.in_port.ofp_port);
+-    uint32_t pid = dpif_port_get_pid(ctx->xbridge->dpif, odp_port,
+-                                     flow_hash_5tuple(&ctx->xin->flow, 0));
++    uint32_t pid = dpif_port_get_pid(ctx->xbridge->dpif, odp_port);
+     odp_put_userspace_action(pid, &cookie, sizeof cookie, ODPP_NONE,
+                              false, ctx->odp_actions);
+ }
+-- 
+2.17.1
+

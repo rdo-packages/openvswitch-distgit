@@ -1,0 +1,310 @@
+From 57ce73db12f6d3e980c0b285015c998183f26c8d Mon Sep 17 00:00:00 2001
+From: Kevin Traynor <ktraynor@redhat.com>
+Date: Fri, 31 Aug 2018 09:47:55 +0100
+Subject: [PATCH] dpif-netdev: Add round-robin based rxq to pmd assignment.
+
+Prior to OVS 2.9 automatic assignment of Rxqs to PMDs
+(i.e. CPUs) was done by round-robin.
+
+That was changed in OVS 2.9 to ordering the Rxqs based on
+their measured processing cycles. This was to assign the
+busiest Rxqs to different PMDs, improving aggregate
+throughput.
+
+For the most part the new scheme should be better, but
+there could be situations where a user prefers a simple
+round-robin scheme because Rxqs from a single port are
+more likely to be spread across multiple PMDs, and/or
+traffic is very bursty/unpredictable.
+
+Add 'pmd-rxq-assign' config to allow a user to select
+round-robin based assignment.
+
+Signed-off-by: Kevin Traynor <ktraynor@redhat.com>
+Acked-by: Eelco Chaudron <echaudro@redhat.com>
+Acked-by: Ilya Maximets <i.maximets@samsung.com>
+Signed-off-by: Ian Stokes <ian.stokes@intel.com>
+---
+ Documentation/topics/dpdk/pmd.rst | 33 +++++++++++++---
+ NEWS                              |  4 +-
+ lib/dpif-netdev.c                 | 83 +++++++++++++++++++++++++++++----------
+ tests/pmd.at                      | 12 +++++-
+ vswitchd/vswitch.xml              | 24 +++++++++++
+ 5 files changed, 126 insertions(+), 30 deletions(-)
+
+diff --git a/Documentation/topics/dpdk/pmd.rst b/Documentation/topics/dpdk/pmd.rst
+index 5f0671e..dd9172d 100644
+--- a/Documentation/topics/dpdk/pmd.rst
++++ b/Documentation/topics/dpdk/pmd.rst
+@@ -113,10 +113,15 @@ means that this thread will only poll the *pinned* Rx queues.
+ 
+ If ``pmd-rxq-affinity`` is not set for Rx queues, they will be assigned to PMDs
+-(cores) automatically. Where known, the processing cycles that have been stored
+-for each Rx queue will be used to assign Rx queue to PMDs based on a round
+-robin of the sorted Rx queues. For example, take the following example, where
+-there are five Rx queues and three cores - 3, 7, and 8 - available and the
+-measured usage of core cycles per Rx queue over the last interval is seen to
+-be:
++(cores) automatically.
++
++The algorithm used to automatically assign Rxqs to PMDs can be set by::
++
++    $ ovs-vsctl set Open_vSwitch . other_config:pmd-rxq-assign=<assignment>
++
++By default, ``cycles`` assignment is used where the Rxqs will be ordered by
++their measured processing cycles, and then be evenly assigned in descending
++order to PMDs based on an up/down walk of the PMDs. For example, where there
++are five Rx queues and three cores - 3, 7, and 8 - available and the measured
++usage of core cycles per Rx queue over the last interval is seen to be:
+ 
+ - Queue #0: 30%
+@@ -132,4 +137,20 @@ The Rx queues will be assigned to the cores in the following order::
+     Core 8: Q3 (60%) | Q0 (30%)
+ 
++Alternatively, ``roundrobin`` assignment can be used, where the Rxqs are
++assigned to PMDs in a round-robined fashion. This algorithm was used by
++default prior to OVS 2.9. For example, given the following ports and queues:
++
++- Port #0 Queue #0 (P0Q0)
++- Port #0 Queue #1 (P0Q1)
++- Port #1 Queue #0 (P1Q0)
++- Port #1 Queue #1 (P1Q1)
++- Port #1 Queue #2 (P1Q2)
++
++The Rx queues may be assigned to the cores in the following order::
++
++    Core 3: P0Q0 | P1Q1
++    Core 7: P0Q1 | P1Q2
++    Core 8: P1Q0 |
++
+ To see the current measured usage history of PMD core cycles for each Rx
+ queue::
+diff --git a/NEWS b/NEWS
+index 04de807..87da271 100644
+--- a/NEWS
++++ b/NEWS
+@@ -43,6 +43,8 @@
+      * Allow init to fail and record DPDK status/version in OVS database.
+      * Add experimental flow hardware offload support
+      * Support both shared and per port mempools for DPDK devices.
++     * Add option for simple round-robin based Rxq to PMD assignment.
++       It can be set with pmd-rxq-assign.
+    - Userspace datapath:
+      * Commands ovs-appctl dpif-netdev/pmd-*-show can now work on a single PMD
+      * Detailed PMD performance metrics available with new command
+
+diff --git a/lib/dpif-netdev.c b/lib/dpif-netdev.c
+index 52b5bc2..466d5ac 100644
+--- a/lib/dpif-netdev.c
++++ b/lib/dpif-netdev.c
+@@ -342,4 +342,6 @@ struct dp_netdev {
+     struct id_pool *tx_qid_pool;
+     struct ovs_mutex tx_qid_pool_mutex;
++    /* Use measured cycles for rxq to pmd assignment. */
++    bool pmd_rxq_assign_cyc;
+ 
+     /* Protects the access of the 'struct dp_netdev_pmd_thread'
+@@ -1493,4 +1495,5 @@ create_dp_netdev(const char *name, const struct dpif_class *class,
+ 
+     cmap_init(&dp->poll_threads);
++    dp->pmd_rxq_assign_cyc = true;
+ 
+     ovs_mutex_init(&dp->tx_qid_pool_mutex);
+@@ -3717,4 +3720,6 @@ dpif_netdev_set_config(struct dpif *dpif, const struct smap *other_config)
+     struct dp_netdev *dp = get_dp_netdev(dpif);
+     const char *cmask = smap_get(other_config, "pmd-cpu-mask");
++    const char *pmd_rxq_assign = smap_get_def(other_config, "pmd-rxq-assign",
++                                             "cycles");
+     unsigned long long insert_prob =
+         smap_get_ullong(other_config, "emc-insert-inv-prob",
+@@ -3779,4 +3784,18 @@ dpif_netdev_set_config(struct dpif *dpif, const struct smap *other_config)
+         }
+     }
++
++    bool pmd_rxq_assign_cyc = !strcmp(pmd_rxq_assign, "cycles");
++    if (!pmd_rxq_assign_cyc && strcmp(pmd_rxq_assign, "roundrobin")) {
++        VLOG_WARN("Unsupported Rxq to PMD assignment mode in pmd-rxq-assign. "
++                      "Defaulting to 'cycles'.");
++        pmd_rxq_assign_cyc = true;
++        pmd_rxq_assign = "cycles";
++    }
++    if (dp->pmd_rxq_assign_cyc != pmd_rxq_assign_cyc) {
++        dp->pmd_rxq_assign_cyc = pmd_rxq_assign_cyc;
++        VLOG_INFO("Rxq to PMD assignment mode changed to: \'%s\'.",
++                  pmd_rxq_assign);
++        dp_netdev_request_reconfigure(dp);
++    }
+     return 0;
+ }
+@@ -4249,8 +4268,16 @@ rr_numa_list_populate(struct dp_netdev *dp, struct rr_numa_list *rr)
+ }
+ 
+-/* Returns the next pmd from the numa node in
+- * incrementing or decrementing order. */
++/*
++ * Returns the next pmd from the numa node.
++ *
++ * If 'updown' is 'true' it will alternate between selecting the next pmd in
++ * either an up or down walk, switching between up/down when the first or last
++ * core is reached. e.g. 1,2,3,3,2,1,1,2...
++ *
++ * If 'updown' is 'false' it will select the next pmd wrapping around when last
++ * core reached. e.g. 1,2,3,1,2,3,1,2...
++ */
+ static struct dp_netdev_pmd_thread *
+-rr_numa_get_pmd(struct rr_numa *numa)
++rr_numa_get_pmd(struct rr_numa *numa, bool updown)
+ {
+     int numa_idx = numa->cur_index;
+@@ -4260,5 +4287,9 @@ rr_numa_get_pmd(struct rr_numa *numa)
+         if (numa->cur_index == numa->n_pmds-1) {
+             /* Reached the last pmd. */
+-            numa->idx_inc = false;
++            if (updown) {
++                numa->idx_inc = false;
++            } else {
++                numa->cur_index = 0;
++            }
+         } else {
+             numa->cur_index++;
+@@ -4323,7 +4354,4 @@ compare_rxq_cycles(const void *a, const void *b)
+  * pmds to unpinned queues.
+  *
+- * If 'pinned' is false queues will be sorted by processing cycles they are
+- * consuming and then assigned to pmds in round robin order.
+- *
+  * The function doesn't touch the pmd threads, it just stores the assignment
+  * in the 'pmd' member of each rxq. */
+@@ -4338,4 +4366,5 @@ rxq_scheduling(struct dp_netdev *dp, bool pinned) OVS_REQUIRES(dp->port_mutex)
+     struct rr_numa *numa = NULL;
+     int numa_id;
++    bool assign_cyc = dp->pmd_rxq_assign_cyc;
+ 
+     HMAP_FOR_EACH (port, node, &dp->ports) {
+@@ -4368,10 +4397,13 @@ rxq_scheduling(struct dp_netdev *dp, bool pinned) OVS_REQUIRES(dp->port_mutex)
+                     rxqs = xrealloc(rxqs, sizeof *rxqs * (n_rxqs + 1));
+                 }
+-                /* Sum the queue intervals and store the cycle history. */
+-                for (unsigned i = 0; i < PMD_RXQ_INTERVAL_MAX; i++) {
+-                    cycle_hist += dp_netdev_rxq_get_intrvl_cycles(q, i);
+-                }
+-                dp_netdev_rxq_set_cycles(q, RXQ_CYCLES_PROC_HIST, cycle_hist);
+ 
++                if (assign_cyc) {
++                    /* Sum the queue intervals and store the cycle history. */
++                    for (unsigned i = 0; i < PMD_RXQ_INTERVAL_MAX; i++) {
++                        cycle_hist += dp_netdev_rxq_get_intrvl_cycles(q, i);
++                    }
++                    dp_netdev_rxq_set_cycles(q, RXQ_CYCLES_PROC_HIST,
++                                             cycle_hist);
++                }
+                 /* Store the queue. */
+                 rxqs[n_rxqs++] = q;
+@@ -4380,5 +4412,5 @@ rxq_scheduling(struct dp_netdev *dp, bool pinned) OVS_REQUIRES(dp->port_mutex)
+     }
+ 
+-    if (n_rxqs > 1) {
++    if (n_rxqs > 1 && assign_cyc) {
+         /* Sort the queues in order of the processing cycles
+          * they consumed during their last pmd interval. */
+@@ -4404,5 +4436,5 @@ rxq_scheduling(struct dp_netdev *dp, bool pinned) OVS_REQUIRES(dp->port_mutex)
+                 continue;
+             }
+-            rxqs[i]->pmd = rr_numa_get_pmd(non_local_numa);
++            rxqs[i]->pmd = rr_numa_get_pmd(non_local_numa, assign_cyc);
+             VLOG_WARN("There's no available (non-isolated) pmd thread "
+                       "on numa node %d. Queue %d on port \'%s\' will "
+@@ -4413,11 +4445,20 @@ rxq_scheduling(struct dp_netdev *dp, bool pinned) OVS_REQUIRES(dp->port_mutex)
+                       rxqs[i]->pmd->core_id, rxqs[i]->pmd->numa_id);
+         } else {
+-        rxqs[i]->pmd = rr_numa_get_pmd(numa);
+-        VLOG_INFO("Core %d on numa node %d assigned port \'%s\' "
+-                  "rx queue %d (measured processing cycles %"PRIu64").",
+-                  rxqs[i]->pmd->core_id, numa_id,
+-                  netdev_rxq_get_name(rxqs[i]->rx),
+-                  netdev_rxq_get_queue_id(rxqs[i]->rx),
+-                  dp_netdev_rxq_get_cycles(rxqs[i], RXQ_CYCLES_PROC_HIST));
++            rxqs[i]->pmd = rr_numa_get_pmd(numa, assign_cyc);
++            if (assign_cyc) {
++                VLOG_INFO("Core %d on numa node %d assigned port \'%s\' "
++                          "rx queue %d "
++                          "(measured processing cycles %"PRIu64").",
++                          rxqs[i]->pmd->core_id, numa_id,
++                          netdev_rxq_get_name(rxqs[i]->rx),
++                          netdev_rxq_get_queue_id(rxqs[i]->rx),
++                          dp_netdev_rxq_get_cycles(rxqs[i],
++                                                   RXQ_CYCLES_PROC_HIST));
++            } else {
++                VLOG_INFO("Core %d on numa node %d assigned port \'%s\' "
++                          "rx queue %d.", rxqs[i]->pmd->core_id, numa_id,
++                          netdev_rxq_get_name(rxqs[i]->rx),
++                          netdev_rxq_get_queue_id(rxqs[i]->rx));
++            }
+         }
+     }
+diff --git a/tests/pmd.at b/tests/pmd.at
+index 4cae6c8..1f952f3 100644
+--- a/tests/pmd.at
++++ b/tests/pmd.at
+@@ -62,5 +62,6 @@ m4_define([CHECK_PMD_THREADS_CREATED], [
+ 
+ m4_define([SED_NUMA_CORE_PATTERN], ["s/\(numa_id \)[[0-9]]*\( core_id \)[[0-9]]*:/\1<cleared>\2<cleared>:/"])
+-m4_define([SED_NUMA_CORE_QUEUE_PATTERN], ["s/1 2 5 6/<group>/;s/0 3 4 7/<group>/"])
++m4_define([SED_NUMA_CORE_QUEUE_CYC_PATTERN], ["s/1 2 5 6/<group>/;s/0 3 4 7/<group>/"])
++m4_define([SED_NUMA_CORE_QUEUE_PQ_PATTERN], ["s/1 3 5 7/<group>/;s/0 2 4 6/<group>/"])
+ m4_define([DUMMY_NUMA], [--dummy-numa="0,0,0,0"])
+ 
+@@ -146,9 +147,16 @@ pmd thread numa_id <cleared> core_id <cleared>:
+ ])
+ 
++AT_CHECK([ovs-vsctl set Open_vSwitch . other_config:pmd-rxq-assign=cycles])
+ TMP=$(cat ovs-vswitchd.log | wc -l | tr -d [[:blank:]])
+ AT_CHECK([ovs-vsctl set Open_vSwitch . other_config:pmd-cpu-mask=0x3])
+ CHECK_PMD_THREADS_CREATED([2], [], [+$TMP])
+ 
+-AT_CHECK([ovs-appctl dpif-netdev/pmd-rxq-show | sed ':a;/AVAIL$/{N;s/\n//;ba;}' | parse_pmd_rxq_show_group | sed SED_NUMA_CORE_QUEUE_PATTERN], [0], [dnl
++AT_CHECK([ovs-appctl dpif-netdev/pmd-rxq-show | sed ':a;/AVAIL$/{N;s/\n//;ba;}' | parse_pmd_rxq_show_group | sed SED_NUMA_CORE_QUEUE_CYC_PATTERN], [0], [dnl
++port: p0 queue-id: <group>
++port: p0 queue-id: <group>
++])
++
++AT_CHECK([ovs-vsctl set Open_vSwitch . other_config:pmd-rxq-assign=roundrobin])
++AT_CHECK([ovs-appctl dpif-netdev/pmd-rxq-show | sed ':a;/AVAIL$/{N;s/\n//;ba;}' | parse_pmd_rxq_show_group | sed SED_NUMA_CORE_QUEUE_PQ_PATTERN], [0], [dnl
+ port: p0 queue-id: <group>
+ port: p0 queue-id: <group>
+diff --git a/vswitchd/vswitch.xml b/vswitchd/vswitch.xml
+index e318151..91d132d 100644
+--- a/vswitchd/vswitch.xml
++++ b/vswitchd/vswitch.xml
+@@ -433,4 +433,28 @@
+       </column>
+ 
++      <column name="other_config" key="pmd-rxq-assign"
++              type='{"type": "string",
++                     "enum": ["set", ["cycles", "roundrobin"]]}'>
++        <p>
++          Specifies how RX queues will be automatically assigned to CPU cores.
++          Options:
++          <dl>
++            <dt><code>cycles</code></dt>
++            <dd>Rxqs will be sorted by order of measured processing cycles
++            before being assigned to CPU cores.</dd>
++            <dt><code>roundrobin</code></dt>
++            <dd>Rxqs will be round-robined across CPU cores.</dd>
++          </dl>
++        </p>
++        <p>
++          The default value is <code>cycles</code>.
++        </p>
++        <p>
++          Changing this value will affect an automatic re-assignment of Rxqs to
++          CPUs. Note: Rxqs mapped to CPU cores with
++          <code>pmd-rxq-affinity</code> are unaffected.
++        </p>
++      </column>
++
+       <column name="other_config" key="n-handler-threads"
+               type='{"type": "integer", "minInteger": 1}'>
+-- 
+1.8.3.1
+
