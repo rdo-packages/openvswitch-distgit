@@ -519,12 +519,12 @@ chown -R openvswitch:openvswitch /etc/openvswitch
 %files -n python2-openvswitch
 %{python2_sitearch}/ovs
 %{python2_sitearch}/ovs-*.egg-info
-%doc COPYING
+%doc LICENSE
 
 %files -n python3-openvswitch
 %{python3_sitearch}/ovs
 %{python3_sitearch}/ovs-*.egg-info
-%doc COPYING
+%doc LICENSE
 
 %files test
 %{_bindir}/ovs-test
