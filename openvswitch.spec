@@ -84,7 +84,7 @@ Patch070: 0001-OVN-add-CT_LB-action-to-ovn-trace.patch
 
 BuildRequires: gcc-c++
 BuildRequires: gcc
-BuildRequires: python2-sphinx
+BuildRequires: python3-sphinx
 BuildRequires: autoconf automake libtool
 BuildRequires: systemd-units openssl openssl-devel
 BuildRequires: python2-devel python2-six
