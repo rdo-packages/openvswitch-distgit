@@ -82,6 +82,8 @@ Patch051: 0001-dpif-Remove-support-for-multiple-queues-per-port.patch
 # Bug 1635344
 Patch070: 0001-OVN-add-CT_LB-action-to-ovn-trace.patch
 
+Patch080: 0001-ovn.at-Skip-ACL-rate-limiting-test-on-slow-overloade.patch
+
 BuildRequires: gcc-c++
 BuildRequires: gcc
 BuildRequires: python3-sphinx
@@ -357,7 +359,9 @@ rm -f $RPM_BUILD_ROOT/%{_bindir}/ovn-docker-overlay-driver \
 
 %check
 %if %{with check}
-    if make check TESTSUITEFLAGS='%{_smp_mflags}' RECHECK=yes; then :;
+    if make check TESTSUITEFLAGS='%{_smp_mflags}' ||
+       make check TESTSUITEFLAGS='--recheck' ||
+       make check TESTSUITEFLAGS='--recheck'; then :;
     else
         cat tests/testsuite.log
         exit 1

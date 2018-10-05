@@ -1,0 +1,70 @@
+From 72bb6af9f31f3d6a000a7f22f9a82939119f63af Mon Sep 17 00:00:00 2001
+From: Justin Pettit <jpettit@ovn.org>
+Date: Wed, 5 Sep 2018 16:51:09 -0700
+Subject: [PATCH] ovn.at: Skip ACL rate-limiting test on slow/overloaded
+ systems.
+
+In ACL rate-limiting test, we send three sets of 100 packets.  One of
+the sets drops packets at a rate of 10 per second, one at a rate of 5
+per second, and one not at all.  On my setup, it takes roughly 0.67
+seconds to send those 300 packets, but we have reports of it taking over
+15 seconds on others.  The test was intended to allow some flexibility
+in run-time, but it's very difficult to design a mechanism that can all
+possibilities.
+
+To prevent false test failures, this patch changes the test to check
+the duration count of the meter, and if it's greater than nine seconds,
+just skip the test.
+
+Signed-off-by: Justin Pettit <jpettit@ovn.org>
+Reported-by: Thomas Goirand <zigo@debian.org>
+---
+ tests/ovn.at | 21 +++++++++++++++------
+ 1 file changed, 15 insertions(+), 6 deletions(-)
+
+diff --git a/tests/ovn.at b/tests/ovn.at
+index 031b6ada0..61b4f8924 100644
+--- a/tests/ovn.at
++++ b/tests/ovn.at
+@@ -6500,15 +6500,25 @@ for i in `seq 1 100`; do
+     ovs-appctl netdev-dummy/receive lp1 'in_port(1),eth(src=f0:00:00:00:00:01,dst=f0:00:00:00:00:02),eth_type(0x0800),ipv4(src=192.168.1.2,dst=192.168.1.3,proto=6,tos=0,ttl=64,frag=no),tcp(src=7777,dst=82)'
+ done
+ 
++# The rate at which packets are sent is highly system-dependent, so we
++# can't count on precise drop counts.  To work around that, we just
++# check that exactly 100 "http-acl3" actions were logged and that there
++# were more "http-acl1" actions than "http-acl2" ones.
++OVS_WAIT_UNTIL([ test 100 = $(grep -c 'http-acl3' hv/ovn-controller.log) ])
++
++# On particularly slow or overloaded systems, the transmission rate may
++# be lower than the configured meter rate.  To prevent false test
++# failures, we check the duration count of the meter, and if it's
++# greater than nine seconds, just skip the test.
++d_secs=$(as hv ovs-ofctl -O OpenFlow13 meter-stats br-int | grep "meter:1" | sed 's/.* duration:\([[0-9]]\{1,\}\)\.[[0-9]]\+s .*/\1/')
++
++echo "Meter duration: $d_secs"
++AT_SKIP_IF([test $d_secs -gt 9])
++
+ # Print some information that may help debugging.
+ as hv ovs-appctl -t ovn-controller meter-table-list
+ as hv ovs-ofctl -O OpenFlow13 meter-stats br-int
+ 
+-# The userspace meter implementation doesn't precisely enforce counts,
+-# so we just check that exactly 100 "http-acl3" actions were logged and
+-# that there were more "http-acl1" actions than "http-acl2" ones.
+-OVS_WAIT_UNTIL([ test 100 = $(grep -c 'http-acl3' hv/ovn-controller.log) ])
+-
+ n_acl1=$(grep -c 'http-acl1' hv/ovn-controller.log)
+ n_acl2=$(grep -c 'http-acl2' hv/ovn-controller.log)
+ n_acl3=$(grep -c 'http-acl3' hv/ovn-controller.log)
+@@ -6516,7 +6526,6 @@ n_acl3=$(grep -c 'http-acl3' hv/ovn-controller.log)
+ AT_CHECK([ test $n_acl3 -gt $n_acl1 ], [0], [])
+ AT_CHECK([ test $n_acl1 -gt $n_acl2 ], [0], [])
+ 
+-
+ OVN_CLEANUP([hv])
+ AT_CLEANUP
+ 
+-- 
+2.17.1
+
