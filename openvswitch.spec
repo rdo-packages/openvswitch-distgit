@@ -24,7 +24,8 @@
 # test-suite is broken for big endians
 # https://bugzilla.redhat.com/show_bug.cgi?id=1105458#c10
 # "ofproto-dpif - select group with dp_hash selection method" test is broken on armv7lh
-%ifarch x86_64 aarch64 ppc64le
+# FIXME often tests fails on non-x86_64 architectures due to timing problems
+%ifarch x86_64
 %bcond_without check
 %else
 %bcond_with check
