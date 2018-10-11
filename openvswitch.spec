@@ -40,7 +40,7 @@ Name: openvswitch
 Summary: Open vSwitch daemon/database/utilities
 URL: http://www.openvswitch.org/
 Version: 2.10.0
-Release: 1%{?commit0:.%{date}git%{shortcommit0}}%{?dist}
+Release: 2%{?commit0:.%{date}git%{shortcommit0}}%{?dist}
 
 # Nearly all of openvswitch is ASL 2.0.  The bugtool is LGPLv2+, and the
 # lib/sflow*.[ch] files are SISSL
@@ -672,6 +672,9 @@ chown -R openvswitch:openvswitch /etc/openvswitch
 %{_unitdir}/ovn-controller-vtep.service
 
 %changelog
+* Thu Oct 11 2018 Timothy Redaelli <tredaelli@redhat.com> - 2.10.0-2
+- Rebuilt for new unbound (#1638428)
+
 * Fri Oct 05 2018 Timothy Redaelli <tredaelli@redhat.com> - 2.10.0-1
 - Align with "Fast Datapath" 2.10.0-10 (#1633555)
 
