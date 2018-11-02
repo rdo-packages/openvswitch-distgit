@@ -41,7 +41,7 @@ Name: openvswitch
 Summary: Open vSwitch daemon/database/utilities
 URL: http://www.openvswitch.org/
 Version: 2.10.0
-Release: 2%{?commit0:.%{date}git%{shortcommit0}}%{?dist}
+Release: 3%{?commit0:.%{date}git%{shortcommit0}}%{?dist}
 
 # Nearly all of openvswitch is ASL 2.0.  The bugtool is LGPLv2+, and the
 # lib/sflow*.[ch] files are SISSL
@@ -49,18 +49,13 @@ Release: 2%{?commit0:.%{date}git%{shortcommit0}}%{?dist}
 License: ASL 2.0 and LGPLv2+ and SISSL
 
 # NOTE: DPDK does not currently build for s390x
-%define dpdkarches x86_64 aarch64 ppc64le
+%define dpdkarches aarch64 i686 ppc64le x86_64
 
 %if 0%{?commit0:1}
 Source: https://github.com/openvswitch/ovs/archive/%{commit0}.tar.gz#/%{name}-%{shortcommit0}.tar.gz
 %else
 Source: http://openvswitch.org/releases/%{name}-%{version}.tar.gz
 %endif
-
-# The DPDK is designed to optimize througput of network traffic using, among
-# other techniques, carefully crafted assembly instructions.  As such it
-# needs extensive work to port it to other architectures.
-ExclusiveArch: x86_64 aarch64 ppc64le s390x
 
 # ovs-patches
 
@@ -673,6 +668,9 @@ chown -R openvswitch:openvswitch /etc/openvswitch
 %{_unitdir}/ovn-controller-vtep.service
 
 %changelog
+* Fri Nov 02 2018 Timothy Redaelli <tredaelli@redhat.com> - 2.10.0-3
+- Build for any architectures
+
 * Thu Oct 11 2018 Timothy Redaelli <tredaelli@redhat.com> - 2.10.0-2
 - Rebuilt for new unbound (#1638428)
 
