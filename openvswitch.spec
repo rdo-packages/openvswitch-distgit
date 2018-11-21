@@ -37,6 +37,27 @@
 # option to build openvswitch-ovn-docker package
 %bcond_with ovn_docker
 
+# Build python2 (that provides python) and python3 subpackages on Fedora
+# Build only python3 (that provides python) subpackage on RHEL8
+# Build only python subpackage on RHEL7
+%if 0%{?rhel} > 7 || 0%{?fedora}
+# Use Python3
+%global _py python3
+%global _py2 python2
+%global with_python3 1
+%if 0%{?fedora}
+%global with_python2 1
+%else
+%global with_python2 0
+%endif
+%else
+# Use Python2
+%global _py python
+%global _py2 python
+%global with_python2 1
+%global with_python3 0
+%endif
+
 Name: openvswitch
 Summary: Open vSwitch daemon/database/utilities
 URL: http://www.openvswitch.org/
@@ -80,23 +101,30 @@ Patch070: 0001-OVN-add-CT_LB-action-to-ovn-trace.patch
 
 Patch080: 0001-ovn.at-Skip-ACL-rate-limiting-test-on-slow-overloade.patch
 
-BuildRequires: gcc-c++
-BuildRequires: gcc
-BuildRequires: python3-sphinx
+BuildRequires: gcc gcc-c++ make
 BuildRequires: autoconf automake libtool
 BuildRequires: systemd-units openssl openssl-devel
-BuildRequires: python2-devel python2-six
-BuildRequires: python3-devel python3-six
+%if %{with_python3}
+BuildRequires: python3-devel python3-six python3-setuptools
+%endif
+%if %{with_python2}
+BuildRequires: %{_py2}-devel %{_py2}-six %{_py2}-setuptools
+%endif
+BuildRequires: %{_py}-sphinx
 BuildRequires: desktop-file-utils
 BuildRequires: groff-base graphviz
 BuildRequires: unbound-devel
 # make check dependencies
 BuildRequires: procps-ng
-BuildRequires: python2-pyOpenSSL
+%if %{with_python2}
+BuildRequires: pyOpenSSL
+%else
+BuildRequires: python3-pyOpenSSL
+%endif
 %if %{with check_datapath_kernel}
 BuildRequires: nmap-ncat
 # would be useful but not available in RHEL or EPEL
-#BuildRequires: python2-pyftpdlib
+#BuildRequires: pyftpdlib
 %endif
 
 %if %{with libcapng}
@@ -127,30 +155,44 @@ Open vSwitch provides standard network bridging functions and
 support for the OpenFlow protocol for remote per-flow control of
 traffic.
 
-%package -n python2-openvswitch
+%if %{with_python2}
+%package -n %{_py2}-openvswitch
 Summary: Open vSwitch python2 bindings
 License: ASL 2.0
-Requires: python2 python2-six
+Requires: %{_py2} %{_py2}-six
+%if "%{_py2}" == "python2"
 Obsoletes: python-openvswitch < 2.6.1-2
 Provides: python-openvswitch = %{version}-%{release}
+%endif
 
-%description -n python2-openvswitch
+%description -n %{_py2}-openvswitch
 Python bindings for the Open vSwitch database
+%endif
 
+%if %{with_python3}
 %package -n python3-openvswitch
 Summary: Open vSwitch python3 bindings
 License: ASL 2.0
 Requires: python3 python3-six
+%if ! %{with_python2}
+Obsoletes: python-openvswitch < 2.10.0-6
+Provides: python-openvswitch = %{version}-%{release}
+%endif
 
 %description -n python3-openvswitch
 Python bindings for the Open vSwitch database
+%endif
 
 %package test
 Summary: Open vSwitch testing utilities
 License: ASL 2.0
 BuildArch: noarch
-Requires: python2-openvswitch = %{version}-%{release}
-Requires: python2 python2-twisted
+%if %{with_python2}
+Requires: %{_py2}-openvswitch = %{version}-%{release}
+Requires: %{_py2} %{_py2}-twisted%{?rhel:-web}
+%else
+Requires: python3-openvswitch = %{version}-%{release}
+%endif
 
 %description test
 Utilities that are useful to diagnose performance and connectivity
@@ -164,6 +206,7 @@ License: ASL 2.0
 This provides shared library, libopenswitch.so and the openvswitch header
 files needed to build an external application.
 
+%if 0%{?rhel} > 7 || 0%{?fedora} > 28
 %package -n network-scripts-%{name}
 Summary: Open vSwitch legacy network service support
 License: ASL 2.0
@@ -173,6 +216,7 @@ Supplements: (%{name} and network-scripts)
 %description -n network-scripts-%{name}
 This provides the ifup and ifdown scripts for use with the legacy network
 service.
+%endif
 
 %package ovn-central
 Summary: Open vSwitch - Open Virtual Network support
@@ -253,9 +297,9 @@ sed -i.old -e "s/^AC_INIT(openvswitch,.*,/AC_INIT(openvswitch, %{version},/" con
   --with-dpdk \
 %endif
 %endif
-  --with-pkidir=%{_sharedstatedir}/openvswitch/pki \
-  PYTHON=/usr/bin/python2
-/usr/bin/python2 build-aux/dpdkstrip.py \
+  --with-pkidir=%{_sharedstatedir}/openvswitch/pki
+
+/usr/bin/%{_py} build-aux/dpdkstrip.py \
         --dpdk \
         < rhel/usr_lib_systemd_system_ovs-vswitchd.service.in \
         > rhel/usr_lib_systemd_system_ovs-vswitchd.service
@@ -301,20 +345,30 @@ install -p -m 0755 rhel/etc_sysconfig_network-scripts_ifdown-ovs \
 install -p -m 0755 rhel/etc_sysconfig_network-scripts_ifup-ovs \
         $RPM_BUILD_ROOT/%{_sysconfdir}/sysconfig/network-scripts/ifup-ovs
 
-install -d -m 0755 $RPM_BUILD_ROOT%{python2_sitelib}
+%if %{with_python2}
+install -d -m 0755 $RPM_BUILD_ROOT%{python_sitelib}
 cp -a $RPM_BUILD_ROOT/%{_datadir}/openvswitch/python/ovstest \
-        $RPM_BUILD_ROOT%{python2_sitelib}
+        $RPM_BUILD_ROOT%{python_sitelib}
+%else
+install -d -m 0755 $RPM_BUILD_ROOT%{python3_sitelib}
+cp -a $RPM_BUILD_ROOT/%{_datadir}/openvswitch/python/ovstest \
+        $RPM_BUILD_ROOT%{python3_sitelib}
+%endif
 
 # Build the JSON C extension for the Python lib (#1417738)
 pushd python
+%if %{with_python2}
 CPPFLAGS="-I ../include" \
-LDFLAGS="${RPM_LD_FLAGS} -L $RPM_BUILD_ROOT%{_libdir}" \
+LDFLAGS="%{__global_ldflags} -L $RPM_BUILD_ROOT%{_libdir}" \
         %py2_build
 %py2_install
+%endif
+%if %{with_python3}
 CPPFLAGS="-I ../include" \
-LDFLAGS="${RPM_LD_FLAGS} -L $RPM_BUILD_ROOT%{_libdir}" \
+LDFLAGS="%{__global_ldflags} -L $RPM_BUILD_ROOT%{_libdir}" \
         %py3_build
 %py3_install
+%endif
 popd
 
 rm -rf $RPM_BUILD_ROOT/%{_datadir}/openvswitch/python/
@@ -516,30 +570,41 @@ chown -R openvswitch:openvswitch /etc/openvswitch
 %endif
 
 
-%files -n python2-openvswitch
+%if %{with_python2}
+%files -n %{_py2}-openvswitch
 %{python2_sitearch}/ovs
 %{python2_sitearch}/ovs-*.egg-info
 %doc LICENSE
+%endif
 
+%if %{with_python3}
 %files -n python3-openvswitch
 %{python3_sitearch}/ovs
 %{python3_sitearch}/ovs-*.egg-info
 %doc LICENSE
+%endif
 
 %files test
-%{_bindir}/ovs-test
-%{_bindir}/ovs-vlan-test
-%{_bindir}/ovs-l3ping
 %{_bindir}/ovs-pcap
 %{_bindir}/ovs-tcpdump
 %{_bindir}/ovs-tcpundump
-%{_mandir}/man8/ovs-test.8*
-%{_mandir}/man8/ovs-vlan-test.8*
-%{_mandir}/man8/ovs-l3ping.8*
 %{_mandir}/man1/ovs-pcap.1*
 %{_mandir}/man8/ovs-tcpdump.8*
 %{_mandir}/man1/ovs-tcpundump.1*
-%{python2_sitelib}/ovstest
+%if %{with_python2}
+%{_bindir}/ovs-test
+%{_bindir}/ovs-vlan-test
+%{_bindir}/ovs-l3ping
+%{_mandir}/man8/ovs-test.8*
+%{_mandir}/man8/ovs-vlan-test.8*
+%{_mandir}/man8/ovs-l3ping.8*
+%{python_sitelib}/ovstest
+%else
+%exclude %{_mandir}/man8/ovs-test.8*
+%exclude %{_mandir}/man8/ovs-vlan-test.8*
+%exclude %{_mandir}/man8/ovs-l3ping.8*
+%{python3_sitelib}/ovstest
+%endif
 
 %files devel
 %{_libdir}/*.so
@@ -549,9 +614,11 @@ chown -R openvswitch:openvswitch /etc/openvswitch
 %{_includedir}/ovn/*
 %exclude %{_libdir}/*.la
 
+%if 0%{?rhel} > 7 || 0%{?fedora} > 28
 %files -n network-scripts-%{name}
 %{_sysconfdir}/sysconfig/network-scripts/ifup-ovs
 %{_sysconfdir}/sysconfig/network-scripts/ifdown-ovs
+%endif
 
 %files
 %defattr(-,openvswitch,openvswitch)
@@ -570,8 +637,6 @@ chown -R openvswitch:openvswitch /etc/openvswitch
 %{_unitdir}/ovs-vswitchd.service
 %{_unitdir}/ovs-delete-transient-ports.service
 %{_datadir}/openvswitch/scripts/openvswitch.init
-%{_datadir}/openvswitch/bugtool-plugins/
-%{_datadir}/openvswitch/scripts/ovs-bugtool-*
 %{_datadir}/openvswitch/scripts/ovs-check-dead-ifs
 %{_datadir}/openvswitch/scripts/ovs-lib
 %{_datadir}/openvswitch/scripts/ovs-save
@@ -583,7 +648,6 @@ chown -R openvswitch:openvswitch /etc/openvswitch
 %config %{_datadir}/openvswitch/vtep.ovsschema
 %{_bindir}/ovs-appctl
 %{_bindir}/ovs-dpctl
-%{_bindir}/ovs-dpctl-top
 %{_bindir}/ovs-ofctl
 %{_bindir}/ovs-vsctl
 %{_bindir}/ovsdb-client
@@ -591,14 +655,13 @@ chown -R openvswitch:openvswitch /etc/openvswitch
 %{_bindir}/ovs-pki
 %{_bindir}/vtep-ctl
 %{_libdir}/*.so.*
-%{_sbindir}/ovs-bugtool
 %{_sbindir}/ovs-vswitchd
 %{_sbindir}/ovsdb-server
 %{_mandir}/man1/ovsdb-client.1*
 %{_mandir}/man1/ovsdb-server.1*
 %{_mandir}/man1/ovsdb-tool.1*
 %{_mandir}/man5/ovsdb.5*
-%{_mandir}/man5/ovsdb-server.5*
+%{_mandir}/man5/ovsdb-server.5.*
 %{_mandir}/man5/ovs-vswitchd.conf.db.5*
 %{_mandir}/man5/vtep.5*
 %{_mandir}/man7/ovsdb-server.7*
@@ -606,10 +669,8 @@ chown -R openvswitch:openvswitch /etc/openvswitch
 %{_mandir}/man7/ovs-fields.7*
 %{_mandir}/man8/vtep-ctl.8*
 %{_mandir}/man8/ovs-appctl.8*
-%{_mandir}/man8/ovs-bugtool.8*
 %{_mandir}/man8/ovs-ctl.8*
 %{_mandir}/man8/ovs-dpctl.8*
-%{_mandir}/man8/ovs-dpctl-top.8*
 %{_mandir}/man8/ovs-kmod-ctl.8.*
 %{_mandir}/man8/ovs-ofctl.8*
 %{_mandir}/man8/ovs-pki.8*
@@ -621,6 +682,20 @@ chown -R openvswitch:openvswitch /etc/openvswitch
 /var/lib/openvswitch
 %attr(750,openvswitch,openvswitch) /var/log/openvswitch
 %ghost %attr(755,root,root) %verify(not owner group) %{_rundir}/openvswitch
+%if %{with_python2}
+%{_datadir}/openvswitch/bugtool-plugins/
+%{_datadir}/openvswitch/scripts/ovs-bugtool-*
+%{_bindir}/ovs-dpctl-top
+%{_sbindir}/ovs-bugtool
+%{_mandir}/man8/ovs-dpctl-top.8*
+%{_mandir}/man8/ovs-bugtool.8*
+%else
+%exclude %{_mandir}/man8/ovs-dpctl-top.8*
+%endif
+%if 0%{?rhel} && 0%{?rhel} <= 7
+%{_sysconfdir}/sysconfig/network-scripts/ifup-ovs
+%{_sysconfdir}/sysconfig/network-scripts/ifdown-ovs
+%endif
 
 %if %{with ovn_docker}
 %files ovn-docker
@@ -635,9 +710,6 @@ chown -R openvswitch:openvswitch /etc/openvswitch
 %{_bindir}/ovn-trace
 %{_datadir}/openvswitch/scripts/ovn-ctl
 %{_datadir}/openvswitch/scripts/ovndb-servers.ocf
-%{_datadir}/openvswitch/scripts/ovn-bugtool-nbctl-show
-%{_datadir}/openvswitch/scripts/ovn-bugtool-sbctl-lflow-list
-%{_datadir}/openvswitch/scripts/ovn-bugtool-sbctl-show
 %{_mandir}/man1/ovn-detrace.1*
 %{_mandir}/man8/ovn-ctl.8*
 %{_mandir}/man8/ovn-nbctl.8*
@@ -647,6 +719,11 @@ chown -R openvswitch:openvswitch /etc/openvswitch
 %{_mandir}/man5/ovn-nb.5*
 %{_mandir}/man5/ovn-sb.5*
 %{_prefix}/lib/ocf/resource.d/ovn/ovndb-servers
+%if %{with_python2}
+%{_datadir}/openvswitch/scripts/ovn-bugtool-nbctl-show
+%{_datadir}/openvswitch/scripts/ovn-bugtool-sbctl-lflow-list
+%{_datadir}/openvswitch/scripts/ovn-bugtool-sbctl-show
+%endif
 
 %files ovn-central
 %{_bindir}/ovn-northd
