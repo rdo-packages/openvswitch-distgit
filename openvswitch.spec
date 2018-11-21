@@ -62,7 +62,7 @@ Name: openvswitch
 Summary: Open vSwitch daemon/database/utilities
 URL: http://www.openvswitch.org/
 Version: 2.10.0
-Release: 3%{?commit0:.%{date}git%{shortcommit0}}%{?dist}
+Release: 4%{?commit0:.%{date}git%{shortcommit0}}%{?dist}
 
 # Nearly all of openvswitch is ASL 2.0.  The bugtool is LGPLv2+, and the
 # lib/sflow*.[ch] files are SISSL
@@ -358,16 +358,22 @@ cp -a $RPM_BUILD_ROOT/%{_datadir}/openvswitch/python/ovstest \
 # Build the JSON C extension for the Python lib (#1417738)
 pushd python
 %if %{with_python2}
-CPPFLAGS="-I ../include" \
-LDFLAGS="%{__global_ldflags} -L $RPM_BUILD_ROOT%{_libdir}" \
-        %py2_build
+(
+export CPPFLAGS="-I ../include"
+export LDFLAGS="%{__global_ldflags} -L $RPM_BUILD_ROOT%{_libdir}"
+%py2_build
 %py2_install
+[ -f "$RPM_BUILD_ROOT/%{python2_sitearch}/ovs/_json.so" ]
+)
 %endif
 %if %{with_python3}
-CPPFLAGS="-I ../include" \
-LDFLAGS="%{__global_ldflags} -L $RPM_BUILD_ROOT%{_libdir}" \
-        %py3_build
+(
+export CPPFLAGS="-I ../include"
+export LDFLAGS="%{__global_ldflags} -L $RPM_BUILD_ROOT%{_libdir}"
+%py3_build
 %py3_install
+[ -f "$RPM_BUILD_ROOT/%{python3_sitearch}/ovs/_json.cpython-%{python3_version_nodots}m-%{_arch}-%{_target_os}%{?_gnu}.so" ]
+)
 %endif
 popd
 
@@ -745,6 +751,9 @@ chown -R openvswitch:openvswitch /etc/openvswitch
 %{_unitdir}/ovn-controller-vtep.service
 
 %changelog
+* Wed Nov 21 2018 Timothy Redaelli <tredaelli@redhat.com> - 2.10.0-4
+- Fix C JSON library creation on Fedora Rawhide and exit if shared library cannot be created
+
 * Fri Nov 02 2018 Timothy Redaelli <tredaelli@redhat.com> - 2.10.0-3
 - Build for any architectures
 
