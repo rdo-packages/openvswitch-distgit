@@ -64,7 +64,7 @@ URL: http://www.openvswitch.org/
 # Carried over from 2.6.1 CBS builds, introduced to win over 2.6.90
 Epoch:   1
 Version: 2.10.0
-Release: 5%{?commit0:.%{date}git%{shortcommit0}}%{?dist}
+Release: 6%{?commit0:.%{date}git%{shortcommit0}}%{?dist}
 
 # Nearly all of openvswitch is ASL 2.0.  The bugtool is LGPLv2+, and the
 # lib/sflow*.[ch] files are SISSL
@@ -194,7 +194,7 @@ License: ASL 2.0
 BuildArch: noarch
 %if %{with_python2}
 Requires: %{_py2}-openvswitch = %{epoch}:%{version}-%{release}
-Requires: %{_py2} %{_py2}-twisted%{?rhel:-web}
+Requires: %{_py2} %{_py}-twisted%{?rhel:-web}
 %else
 Requires: python3-openvswitch = %{version}-%{release}
 %endif
