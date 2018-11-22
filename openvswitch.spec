@@ -53,7 +53,7 @@
 %else
 # Use Python2
 %global _py python
-%global _py2 python
+%global _py2 python2
 %global with_python2 1
 %global with_python3 0
 %endif
@@ -64,7 +64,7 @@ URL: http://www.openvswitch.org/
 # Carried over from 2.6.1 CBS builds, introduced to win over 2.6.90
 Epoch:   1
 Version: 2.10.0
-Release: 4%{?commit0:.%{date}git%{shortcommit0}}%{?dist}
+Release: 5%{?commit0:.%{date}git%{shortcommit0}}%{?dist}
 
 # Nearly all of openvswitch is ASL 2.0.  The bugtool is LGPLv2+, and the
 # lib/sflow*.[ch] files are SISSL
