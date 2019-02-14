@@ -1,8 +1,8 @@
 # Uncomment these for snapshot releases:
 # commit0 is the git sha of the last commit
 # date is the date YYYYMMDD of the snapshot
-#%%global commit0 bd916d13dbb845746983a6780da772154df647ba
-#%%global date 20180219
+#%%global commit0 a8a67726e6bb5374f582f4d469261f0e5498dbac
+#%%global date 20190214
 %global shortcommit0 %(c=%{commit0}; echo ${c:0:7})
 
 # If wants to run tests while building, specify the '--with check'
@@ -63,8 +63,8 @@ Summary: Open vSwitch daemon/database/utilities
 URL: http://www.openvswitch.org/
 # Carried over from 2.6.1 CBS builds, introduced to win over 2.6.90
 Epoch:   1
-Version: 2.10.0
-Release: 6%{?commit0:.%{date}git%{shortcommit0}}%{?dist}
+Version: 2.11.0
+Release: 1%{?commit0:.%{date}git%{shortcommit0}}%{?dist}
 
 # Nearly all of openvswitch is ASL 2.0.  The bugtool is LGPLv2+, and the
 # lib/sflow*.[ch] files are SISSL
@@ -180,7 +180,7 @@ Summary: Open vSwitch python3 bindings
 License: ASL 2.0
 Requires: python3 python3-six
 %if ! %{with_python2}
-Obsoletes: python-openvswitch < 2.10.0-6
+Obsoletes: python-openvswitch < 2.11.0-1
 Provides: python-openvswitch = %{version}-%{release}
 %endif
 
@@ -756,6 +756,9 @@ chown -R openvswitch:openvswitch /etc/openvswitch
 %{_unitdir}/ovn-controller-vtep.service
 
 %changelog
+* Thu Feb 14 2019 Quique Llorente <ellorent@redhat.com> - 2.11.0-1
+- Upgrade ovs to 2.11.0 to be DPDK 18.x compatible 
+
 * Wed Nov 21 2018 Timothy Redaelli <tredaelli@redhat.com> - 2.10.0-4
 - Fix C JSON library creation on Fedora Rawhide and exit if shared library cannot be created
 
